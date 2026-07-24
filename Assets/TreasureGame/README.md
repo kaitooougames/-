@@ -8,7 +8,31 @@
 - 行動カード側の既存 `Player`、`Treasure`、`TreasureController` は未変更
 - カード画像、マテリアル、プレハブを専用フォルダへ移植
 - 独立確認用シーンを `Scenes/TreasureScene.unity` として移植
+- 行動カードの環境を土台にした統合シーンを `Assets/Scenes/IntegratedGameScene.unity` として作成
 - 行動カード側とお宝側を同時にコンパイルできることを確認済み
+
+## 本番用の統合シーン
+
+`Assets/Scenes/IntegratedGameScene.unity` を今後の本番シーンとして使用します。
+
+このシーンでは、次の環境は行動カード側のものを維持しています。
+
+- テーブル・床
+- Main Camera
+- Directional Light
+- Global Volume
+- GameManager・BGM
+- 行動カード、逮捕、警備サイコロ、既存UI
+
+お宝側から追加したものは次のとおりです。
+
+- `TreasureGame Controller`
+- `TreasurePlayer1`～`TreasurePlayer4`
+- 宝の手札位置と展示位置
+- 宝カードのシーンテンプレート
+
+`TreasureTurnPrototype` は無効化済みです。
+元の `Assets/Scenes/SampleScene.unity` と、独立確認用の `TreasureScene.unity` は変更せず残しています。
 
 ## コードから参照する名前
 
@@ -46,12 +70,10 @@ Assets/TreasureGame/
 
 ## 次の統合作業
 
-1. `TreasureScene` のお宝管理オブジェクト、Player位置、展示位置、宝テンプレートを行動カードの `SampleScene` へ統合
-2. `TreasureTurnPrototype` を無効化
-3. `ActionTreasureBridge` を作成
-4. 行動カード公開後に展示・怪盗・逮捕報酬情報をお宝側へ渡す
-5. Player 2～4の自動選択をお宝カード選択にも接続
-6. 2人・3人プレイ時の行動カード側参加者を制限
+1. `ActionTreasureBridge` を作成
+2. 行動カード公開後に展示・怪盗・逮捕報酬情報をお宝側へ渡す
+3. Player 2～4の自動選択をお宝カード選択にも接続
+4. 2人・3人プレイ時の行動カード側参加者を制限
 
 怪盗配列には、逮捕判定と警備サイコロ判定を通過した
 `HasBeenArrested == false` のプレイヤーだけを含めます。
