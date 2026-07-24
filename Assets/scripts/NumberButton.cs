@@ -2,26 +2,26 @@ using UnityEngine;
 
 public class NumberButton : MonoBehaviour
 {
-    public int number;  // 1`6 ‚Ì’liInspector ‚Åİ’èj
-    private Vector3 originalPosition; // ‰ŠúˆÊ’u‚ğ•Û‘¶
-    private float hoverHeight = 0.1f; // ƒzƒo[‚Ìã¸—Ê
+    public int number;  // 1ã€œ6 ã®å€¤ï¼ˆInspector ã§è¨­å®šï¼‰
+    private Vector3 originalPosition; // åˆæœŸä½ç½®ã‚’ä¿å­˜
+    private float hoverHeight = 0.1f; // ãƒ›ãƒãƒ¼æ™‚ã®ä¸Šæ˜‡é‡
 
-    private CardInteraction assignedPhantomThiefCard;  // **ŠÖ˜A•t‚¯‚ç‚ê‚½‰ö“ƒJ[ƒh**
+    private CardInteraction assignedPhantomThiefCard;  // **é–¢é€£ä»˜ã‘ã‚‰ã‚ŒãŸæ€ªç›—ã‚«ãƒ¼ãƒ‰**
 
     void Start()
     {
-        originalPosition = transform.position; // ‰ŠúˆÊ’u‚ğ•Û‘¶
+        originalPosition = transform.position; // åˆæœŸä½ç½®ã‚’ä¿å­˜
     }
 
     void OnMouseEnter()
     {
-        // ƒJ[ƒ\ƒ‹‚ğ‡‚í‚¹‚½‚ç­‚µã‚ÉˆÚ“®
+        // ã‚«ãƒ¼ã‚½ãƒ«ã‚’åˆã‚ã›ãŸã‚‰å°‘ã—ä¸Šã«ç§»å‹•
         transform.position = originalPosition + new Vector3(0, hoverHeight, 0);
     }
 
     void OnMouseExit()
     {
-        // ƒJ[ƒ\ƒ‹‚ªŠO‚ê‚½‚çŒ³‚ÌˆÊ’u‚É–ß‚é
+        // ã‚«ãƒ¼ã‚½ãƒ«ãŒå¤–ã‚ŒãŸã‚‰å…ƒã®ä½ç½®ã«æˆ»ã‚‹
         transform.position = originalPosition;
     }
 
@@ -33,11 +33,11 @@ public class NumberButton : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("NumberButton: ŠÖ˜A•t‚¯‚ç‚ê‚½‰ö“ƒJ[ƒh‚ª‚ ‚è‚Ü‚¹‚ñI");
+            Debug.LogWarning("NumberButton: é–¢é€£ä»˜ã‘ã‚‰ã‚ŒãŸæ€ªç›—ã‚«ãƒ¼ãƒ‰ãŒã‚ã‚Šã¾ã›ã‚“ï¼");
         }
     }
 
-    // **‰ö“ƒJ[ƒh‚ğƒZƒbƒg‚·‚éŠÖ”**
+    // **æ€ªç›—ã‚«ãƒ¼ãƒ‰ã‚’ã‚»ãƒƒãƒˆã™ã‚‹é–¢æ•°**
     public void SetPhantomThiefCard(CardInteraction card)
     {
         if (card != null && card.isPhantomThief)
@@ -47,7 +47,7 @@ public class NumberButton : MonoBehaviour
         else
         {
             assignedPhantomThiefCard = null;
-            Debug.LogWarning("‰ö“ƒJ[ƒh‚Å‚Í‚È‚¢‚à‚Ì‚ªİ’è‚³‚ê‚æ‚¤‚Æ‚µ‚Ü‚µ‚½: " + card?.name);
+            Debug.LogWarning("æ€ªç›—ã‚«ãƒ¼ãƒ‰ã§ã¯ãªã„ã‚‚ã®ãŒè¨­å®šã•ã‚Œã‚ˆã†ã¨ã—ã¾ã—ãŸ: " + card?.name);
         }
     }
 

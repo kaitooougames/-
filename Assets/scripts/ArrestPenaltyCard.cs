@@ -2,23 +2,23 @@ using UnityEngine;
 
 public class ArrestPenaltyCard : MonoBehaviour
 {
-    private bool isFirstOffense = true;  // ‰”Æƒtƒ‰ƒO
+    private bool isFirstOffense = true;  // åˆçŠ¯ãƒ•ãƒ©ã‚°
 
-    // ‰”Æ‚©‘O‰È‚ ‚è‚©‚ğİ’è‚µAƒJ[ƒh‚ÌŒü‚«‚ğŒˆ’è‚·‚é
+    // åˆçŠ¯ã‹å‰ç§‘ã‚ã‚Šã‹ã‚’è¨­å®šã—ã€ã‚«ãƒ¼ãƒ‰ã®å‘ãã‚’æ±ºå®šã™ã‚‹
     public void SetPenaltyState(bool isFirstOffense)
     {
         this.isFirstOffense = isFirstOffense;
         UpdateCardRotation();
     }
 
-    // ƒJ[ƒh‚ğ— •Ô‚·
+    // ã‚«ãƒ¼ãƒ‰ã‚’è£è¿”ã™
     public void FlipCard()
     {
-        isFirstOffense = false; // ˆê“x— •Ô‚µ‚½‚ç‘O‰È‚ ‚è‚Ìó‘Ô‚É•ÏX
+        isFirstOffense = false; // ä¸€åº¦è£è¿”ã—ãŸã‚‰å‰ç§‘ã‚ã‚Šã®çŠ¶æ…‹ã«å¤‰æ›´
         UpdateCardRotation();
     }
 
-    // ƒJ[ƒh‚ÌŒü‚«‚ğXV
+    // ã‚«ãƒ¼ãƒ‰ã®å‘ãã‚’æ›´æ–°
     private void UpdateCardRotation()
     {
         transform.rotation = isFirstOffense ? Quaternion.Euler(0, 0, 0) : Quaternion.Euler(0, 0, 180);

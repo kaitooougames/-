@@ -27,7 +27,7 @@ public class ArrestEffect : MonoBehaviour
     {
         textMesh.gameObject.SetActive(false);
         textMesh.text = "Batting!";
-        textMesh.color = new Color(0.22f, 0.28f, 0.93f); // Â
+        textMesh.color = new Color(0.22f, 0.28f, 0.93f); // é’
 
         StartCoroutine(EffectAnimation());
        
@@ -35,7 +35,7 @@ public class ArrestEffect : MonoBehaviour
 
     private void ShowEffect(string message)
     {
-        // **Å‰‚ÍƒeƒLƒXƒg‚ð”ñ•\Ž¦**
+        // **æœ€åˆã¯ãƒ†ã‚­ã‚¹ãƒˆã‚’éžè¡¨ç¤º**
         textMesh.gameObject.SetActive(false);
 
         textMesh.text = message;
@@ -44,21 +44,21 @@ public class ArrestEffect : MonoBehaviour
 
     private IEnumerator EffectAnimation()
     {
-        // **1•b‘Ò‹@‚µ‚Ä‚©‚çŠJŽn**
+        // **1ç§’å¾…æ©Ÿã—ã¦ã‹ã‚‰é–‹å§‹**
         yield return new WaitForSeconds(1f);
 
-        // **ƒeƒLƒXƒg‚ð•\Ž¦**
+        // **ãƒ†ã‚­ã‚¹ãƒˆã‚’è¡¨ç¤º**
         textMesh.gameObject.SetActive(true);
 
-        // **‰ŠúˆÊ’u‚ðã‚ÉÝ’è**
+        // **åˆæœŸä½ç½®ã‚’ä¸Šã«è¨­å®š**
         transform.position = originalPosition + Vector3.up * dropHeight;
 
-        // **ˆêu‘å‚«‚­‚µ‚Ä”——Í‚ðo‚·**
+        // **ä¸€çž¬å¤§ããã—ã¦è¿«åŠ›ã‚’å‡ºã™**
         transform.localScale = originalScale * scaleMultiplier;
         yield return new WaitForSeconds(scaleDuration);
         transform.localScale = originalScale;
 
-        // **—Ž‰ºƒAƒjƒ[ƒVƒ‡ƒ“**
+        // **è½ä¸‹ã‚¢ãƒ‹ãƒ¡ãƒ¼ã‚·ãƒ§ãƒ³**
         while (transform.position.y > originalPosition.y)
         {
             transform.position = Vector3.MoveTowards(transform.position, originalPosition, dropSpeed * Time.deltaTime);

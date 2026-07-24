@@ -83,6 +83,11 @@ treasureController.BeginRobberyPhase(robberPlayers, robberyCounts);
 
 怪盗数は1～6です。お宝側で範囲内に補正されます。
 
+**逮捕された怪盗は盗むことができません。**
+行動カード側で逮捕判定と警備サイコロ判定がすべて完了した後、
+`HasBeenArrested == false` の怪盗だけを `robberPlayers` と `robberyCounts` に入れてください。
+逮捕された怪盗をお宝側の `BeginRobberyPhase()` へ渡してはいけません。
+
 実行順はお宝側で自動的に並べ替えられます。
 
 1. 宣言数が大きいプレイヤー
@@ -148,7 +153,7 @@ treasureController.BeginDisplayPhase(displayPlayers, displayCounts);
 // 3. 怪盗開始前に逮捕報酬を予約
 treasureController.QueueArrestRewardDisplays(arrestRewardPlayers);
 
-// 4. 怪盗フェーズ開始
+// 4. 逮捕されていない怪盗だけで怪盗フェーズ開始
 treasureController.BeginRobberyPhase(robberPlayers, robberyCounts);
 
 // 以降はお宝側が以下を自動進行する

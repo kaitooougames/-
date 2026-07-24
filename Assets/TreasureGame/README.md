@@ -53,5 +53,8 @@ Assets/TreasureGame/
 5. Player 2～4の自動選択をお宝カード選択にも接続
 6. 2人・3人プレイ時の行動カード側参加者を制限
 
-詳しい呼び出し順は `Docs/ACTION_CARD_INTEGRATION.md` を参照してください。
+怪盗配列には、逮捕判定と警備サイコロ判定を通過した
+`HasBeenArrested == false` のプレイヤーだけを含めます。
+逮捕された怪盗は盗み処理へ進ませません。
 
+詳しい呼び出し順は `Docs/ACTION_CARD_INTEGRATION.md` を参照してください。

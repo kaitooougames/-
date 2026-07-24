@@ -3,18 +3,18 @@ using System.Collections.Generic;
 
 public class HandManager : MonoBehaviour
 {
-    public List<CardInteraction> cards; // èD‚ÌƒJ[ƒhƒŠƒXƒg
-    private bool cardSelected = false;  // ‚·‚Å‚ÉƒJ[ƒh‚ğ‘I‚ñ‚¾‚©
+    public List<CardInteraction> cards; // æ‰‹æœ­ã®ã‚«ãƒ¼ãƒ‰ãƒªã‚¹ãƒˆ
+    private bool cardSelected = false;  // ã™ã§ã«ã‚«ãƒ¼ãƒ‰ã‚’é¸ã‚“ã ã‹
    
 
 
     void Start()
     {
-        SetInitialPositions(); // ‰ŠúˆÊ’u‚ğİ’è
-        Invoke("ArrangeHand", 1.0f); // 1•bŒã‚ÉèD‚ğ•À‚×‚é
+        SetInitialPositions(); // åˆæœŸä½ç½®ã‚’è¨­å®š
+        Invoke("ArrangeHand", 1.0f); // 1ç§’å¾Œã«æ‰‹æœ­ã‚’ä¸¦ã¹ã‚‹
     }
 
-    // **ƒJ[ƒh‚Ì‰ŠúˆÊ’u‚ğ (0,3,-4) ‚Éİ’è**
+    // **ã‚«ãƒ¼ãƒ‰ã®åˆæœŸä½ç½®ã‚’ (0,3,-4) ã«è¨­å®š**
     void SetInitialPositions()
     {
         foreach (var card in cards)
@@ -34,10 +34,10 @@ public class HandManager : MonoBehaviour
             cards[i].MoveTo(position);
             cards[i].SetHandManager(this);
 
-            // **Å‰‚Ì‰ö“ƒJ[ƒh‚ğŒ©‚Â‚¯‚½‚ç isPhantomThief ‚ğİ’è**
+            // **æœ€åˆã®æ€ªç›—ã‚«ãƒ¼ãƒ‰ã‚’è¦‹ã¤ã‘ãŸã‚‰ isPhantomThief ã‚’è¨­å®š**
             if (cards[i].isPhantomThief)
             {
-                Debug.Log("‰ö“ƒJ[ƒh‚ªƒZƒbƒg‚³‚ê‚Ü‚µ‚½: " + cards[i].name);
+                Debug.Log("æ€ªç›—ã‚«ãƒ¼ãƒ‰ãŒã‚»ãƒƒãƒˆã•ã‚Œã¾ã—ãŸ: " + cards[i].name);
             }
         }
     }
@@ -45,27 +45,27 @@ public class HandManager : MonoBehaviour
     {
         if (cardSelected)
         {
-            Debug.Log("‚·‚Å‚ÉƒJ[ƒh‚ª‘I‘ğ‚³‚ê‚Ä‚¢‚Ü‚·: " + selectedCard.name);
-            return; // ‚·‚Å‚ÉƒJ[ƒh‚ğ‘I‚ñ‚Å‚¢‚½‚ç–³‹
+            Debug.Log("ã™ã§ã«ã‚«ãƒ¼ãƒ‰ãŒé¸æŠã•ã‚Œã¦ã„ã¾ã™: " + selectedCard.name);
+            return; // ã™ã§ã«ã‚«ãƒ¼ãƒ‰ã‚’é¸ã‚“ã§ã„ãŸã‚‰ç„¡è¦–
         }
         cardSelected = true;
-        Debug.Log("ƒJ[ƒh‘I‘ğ: " + selectedCard.name);
+        Debug.Log("ã‚«ãƒ¼ãƒ‰é¸æŠ: " + selectedCard.name);
 
-        // **‰ö“ƒJ[ƒh‚Å‚È‚¯‚ê‚ÎƒJƒƒ‰‚ğˆÚ“®**
+        // **æ€ªç›—ã‚«ãƒ¼ãƒ‰ã§ãªã‘ã‚Œã°ã‚«ãƒ¡ãƒ©ã‚’ç§»å‹•**
         if (!selectedCard.isPhantomThief)
         {
             Camera.main.GetComponent<CameraController>().MoveCamera();
         }
 
 
-        // **‘¼‚ÌƒJ[ƒh‚ğ‰ŠúˆÊ’u‚É–ß‚·**
+        // **ä»–ã®ã‚«ãƒ¼ãƒ‰ã‚’åˆæœŸä½ç½®ã«æˆ»ã™**
         foreach (var card in cards)
         {
             if (card != selectedCard)
             {
-                Debug.Log(card.name + " ‚ğ‰ŠúˆÊ’u‚É–ß‚·");
-                card.MoveTo(new Vector3(0, 3, -4)); // ‰ŠúˆÊ’u‚É–ß‚·
-                card.DisableClick(); // ƒNƒŠƒbƒN‚ğ–³Œø‰»
+                Debug.Log(card.name + " ã‚’åˆæœŸä½ç½®ã«æˆ»ã™");
+                card.MoveTo(new Vector3(0, 3, -4)); // åˆæœŸä½ç½®ã«æˆ»ã™
+                card.DisableClick(); // ã‚¯ãƒªãƒƒã‚¯ã‚’ç„¡åŠ¹åŒ–
 
             }
         }
@@ -77,7 +77,7 @@ public class HandManager : MonoBehaviour
 
         Start();
         cardSelected = false;
-        Debug.Log("2“ú–ÚŠJnI");
+        Debug.Log("2æ—¥ç›®é–‹å§‹ï¼");
     }
 
 }

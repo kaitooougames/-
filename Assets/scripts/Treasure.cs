@@ -2,16 +2,16 @@ using UnityEngine;
 
 public class Treasure : MonoBehaviour
 {
-    public string Type { get; private set; }       // •ó‚Ìí—Şi‹àAŠG‰æA•óÎAˆâ•¨j
-    public string Authenticity { get; private set; } // –{•¨‚©‹U•¨‚©
+    public string Type { get; private set; }       // å®ã®ç¨®é¡ï¼ˆé‡‘ã€çµµç”»ã€å®çŸ³ã€éºç‰©ï¼‰
+    public string Authenticity { get; private set; } // æœ¬ç‰©ã‹å½ç‰©ã‹
 
-    // Treasure‚Ì‰Šú‰»
+    // Treasureã®åˆæœŸåŒ–
     public void Initialize(string type, string authenticity)
     {
         Type = type;
         Authenticity = authenticity;
 
-        // ‚±‚±‚ÅA—á‚¦‚ÎƒJ[ƒh‚ÌŠOŠÏ‚ğ•ÏX‚·‚éˆ—‚ğ’Ç‰Á‚Å‚«‚Ü‚·
-        // —á‚¦‚ÎAType‚É‚æ‚Á‚ÄˆÙ‚È‚éƒeƒNƒXƒ`ƒƒ‚ğİ’è‚·‚é‚È‚Ç
+        // ã“ã“ã§ã€ä¾‹ãˆã°ã‚«ãƒ¼ãƒ‰ã®å¤–è¦³ã‚’å¤‰æ›´ã™ã‚‹å‡¦ç†ã‚’è¿½åŠ ã§ãã¾ã™
+        // ä¾‹ãˆã°ã€Typeã«ã‚ˆã£ã¦ç•°ãªã‚‹ãƒ†ã‚¯ã‚¹ãƒãƒ£ã‚’è¨­å®šã™ã‚‹ãªã©
     }
 }

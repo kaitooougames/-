@@ -3,5 +3,5 @@ using UnityEngine;
 public class ActionCard : MonoBehaviour
 {
     public string cardName;
-    public bool IsCageCard() { /* ŸBƒJ[ƒh‚©”»’è */ return false; }
+    public bool IsCageCard() { /* æª»ã‚«ãƒ¼ãƒ‰ã‹åˆ¤å®š */ return false; }
 }

@@ -20,7 +20,7 @@ public class EffectManager : MonoBehaviour
     public void ShowStealNumber(int number)
     {
         
-        ClearStealNumber(); // ��ɍ폜
+        ClearStealNumber(); // 先に削除
         currentEffect = Instantiate(effectPrefab, new Vector3(0.7f, 0f, -1.17f), Quaternion.identity);
         currentEffect.ShowNumber(number);
     }
