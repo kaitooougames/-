@@ -18,6 +18,12 @@ public class CardInteraction : MonoBehaviour
     public static event System.Action OnAllCardsFlipped; // 全カードがめくられた後のイベント
     private static int flippedCardCount = 0;
     private static int totalCards = 16; // **カードの総数（適宜変更）**
+
+    public static void PrepareFlipCount(int count)
+    {
+        flippedCardCount = 0;
+        totalCards = Mathf.Max(1, count);
+    }
     // **怪盗カード用**
     public bool isPhantomThief = false;  // 怪盗カードかどうか
     public bool isExhibit = false;       // 展示カードかどうか
@@ -92,7 +98,7 @@ public class CardInteraction : MonoBehaviour
         if (!isClickable || isMoving) return; // クリック不可・移動中なら無視
 
         Player player = FindObjectOfType<Player>();
-        if (player == null) return;
+        if (player == null || player.isEliminated) return;
 
         if (isPhantomThief)
         {

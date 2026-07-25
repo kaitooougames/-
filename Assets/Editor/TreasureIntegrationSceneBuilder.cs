@@ -65,7 +65,7 @@ public static class TreasureIntegrationSceneBuilder
 
             foreach (TreasureGame.TreasureTurnPrototype prototype in
                      root.GetComponentsInChildren<TreasureGame.TreasureTurnPrototype>(true))
-                prototype.enabled = false;
+                prototype.enabled = true;
         }
 
         EditorSceneManager.CloseScene(treasureScene, true);

@@ -106,7 +106,10 @@ public class TreasureTurnPrototype : MonoBehaviour
                 if (treasureController.PlayerCount == count) countStyle.fontStyle = FontStyle.Bold;
                 if (GUI.Button(new Rect(Screen.width - 158f + (count - 2) * 48f, playerButtonY, 44f, 34f),
                     $"{count}人", countStyle))
+                {
                     treasureController.RestartWithPlayerCount(count);
+                    global::HandManager.SetPlayerCountGlobally(count);
+                }
             }
 
             GUI.enabled = true;

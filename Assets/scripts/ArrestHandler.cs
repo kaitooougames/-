@@ -9,6 +9,8 @@ public class ArrestHandler : MonoBehaviour
     private List<CardInteraction> phantomThieves = new List<CardInteraction>(); // 怪盗カード
     private List<CardInteraction> cages = new List<CardInteraction>(); // 檻カード
     public List<ArrestEffect> currentBattingEffects = new List<ArrestEffect>();
+    private readonly List<int> successfulCagePlayerIds = new List<int>();
+    private readonly Dictionary<CardInteraction, int> fieldCardOwners = new Dictionary<CardInteraction, int>();
     [SerializeField] ArrestHandler arrestHandler; // ArrestHandlerを参照
 
 
@@ -32,6 +34,8 @@ public class ArrestHandler : MonoBehaviour
         fieldCards.Clear();
         phantomThieves.Clear();
         cages.Clear();
+        successfulCagePlayerIds.Clear();
+        fieldCardOwners.Clear();
 
         // **各プレイヤーのカードを取得**
         Player player = FindObjectOfType<Player>();
@@ -44,6 +48,7 @@ public class ArrestHandler : MonoBehaviour
             player.SelectedCard.SelectedNumber = player.SelectedNumber;
             Debug.Log($"[DEBUG] {player.SelectedCard.name} の SelectedNumber = {player.SelectedCard.SelectedNumber}");
             fieldCards.Add(player.SelectedCard);
+            fieldCardOwners[player.SelectedCard] = 0;
         }
 
         if (player2 != null && !player2.isEliminated && player2.SelectedCard != null)
@@ -51,6 +56,7 @@ public class ArrestHandler : MonoBehaviour
             player2.SelectedCard.SelectedNumber = player2.SelectedNumber;
             Debug.Log($"[DEBUG] {player2.SelectedCard.name} の SelectedNumber = {player2.SelectedCard.SelectedNumber}");
             fieldCards.Add(player2.SelectedCard);
+            fieldCardOwners[player2.SelectedCard] = 1;
         }
 
         if (player3 != null && !player3.isEliminated && player3.SelectedCard != null)
@@ -58,6 +64,7 @@ public class ArrestHandler : MonoBehaviour
             player3.SelectedCard.SelectedNumber = player3.SelectedNumber;
             Debug.Log($"[DEBUG] {player3.SelectedCard.name} の SelectedNumber = {player3.SelectedCard.SelectedNumber}");
             fieldCards.Add(player3.SelectedCard);
+            fieldCardOwners[player3.SelectedCard] = 2;
         }
 
         if (player4 != null && !player4.isEliminated && player4.SelectedCard != null)
@@ -65,6 +72,7 @@ public class ArrestHandler : MonoBehaviour
             player4.SelectedCard.SelectedNumber = player4.SelectedNumber;
             Debug.Log($"[DEBUG] {player4.SelectedCard.name} の SelectedNumber = {player4.SelectedCard.SelectedNumber}");
             fieldCards.Add(player4.SelectedCard);
+            fieldCardOwners[player4.SelectedCard] = 3;
         }
 
 
@@ -163,7 +171,22 @@ public class ArrestHandler : MonoBehaviour
         {
             Debug.Log($"檻が {phantomThieves[i].name} を逮捕！");
             Arrest(phantomThieves[i]);
+            int cagePlayerId = FindPlayerIdByCard(cages[i]);
+            if (cagePlayerId >= 0 && !successfulCagePlayerIds.Contains(cagePlayerId))
+                successfulCagePlayerIds.Add(cagePlayerId);
         }
+    }
+
+    public int[] GetSuccessfulCagePlayerIds()
+    {
+        return successfulCagePlayerIds.ToArray();
+    }
+
+    private int FindPlayerIdByCard(CardInteraction card)
+    {
+        return card != null && fieldCardOwners.TryGetValue(card, out int playerId)
+            ? playerId
+            : -1;
     }
 
     private void Arrest(CardInteraction card)

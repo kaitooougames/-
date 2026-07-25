@@ -10,6 +10,7 @@ public class DiceEffectController : MonoBehaviour
     public GameObject effectPrefab;                 // 出目後の演出エフェクト（optional）
 
     private bool isRolling = false;
+    public bool IsRolling => isRolling;
 
     public void StartDiceRoll(int result)
     {

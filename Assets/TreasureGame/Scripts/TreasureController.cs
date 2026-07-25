@@ -30,6 +30,7 @@ public class TreasureController : MonoBehaviour
     private readonly Dictionary<Player, Treasure> robberDisplaySelections = new Dictionary<Player, Treasure>();
     private readonly HashSet<Treasure> treasuresInTransit = new HashSet<Treasure>();
     private readonly HashSet<Player> blockedFromWinningThisTurn = new HashSet<Player>();
+    private readonly HashSet<int> eliminatedPlayerIds = new HashSet<int>();
     private readonly List<int> queuedArrestRewardPlayerIds = new List<int>();
     private static readonly TreasureType[] RevealTypeOrder =
     {
@@ -51,6 +52,18 @@ public class TreasureController : MonoBehaviour
     public bool CanScrollPlayerOneHandForward => players.Count > 0 && players[0].CanScrollHandForward;
     public bool FreeInteractionMode { get; private set; }
     public string GameResultText => gameResultText;
+    public int GetHandCount(int playerId)
+    {
+        return ValidPlayer(playerId) ? players[playerId].Stock.Count : 0;
+    }
+
+    public void SetPlayerEliminated(int playerId, bool eliminated = true)
+    {
+        if (!ValidPlayer(playerId)) return;
+        if (eliminated) eliminatedPlayerIds.Add(playerId);
+        else eliminatedPlayerIds.Remove(playerId);
+        Debug.Log($"【脱落同期】Player{playerId + 1}：{(eliminated ? "勝利対象外" : "参加中")}");
+    }
     public string InstructionText
     {
         get
@@ -157,6 +170,7 @@ public class TreasureController : MonoBehaviour
         treasuresInTransit.Clear();
         blockedFromWinningThisTurn.Clear();
         queuedArrestRewardPlayerIds.Clear();
+        eliminatedPlayerIds.Clear();
         endTurnAfterCurrentDisplay = false;
         gameResultText = string.Empty;
         playerCount = Mathf.Clamp(requestedPlayerCount, 2, 4);
@@ -237,18 +251,28 @@ public class TreasureController : MonoBehaviour
     // 脱落者処理：指定プレイヤーの残り手札を、選択なしで全て同時展示する。
     public void DisplayAllTreasures(int playerId)
     {
-        if (!ValidPlayer(playerId) || Phase != TreasurePhase.Waiting) return;
-        Player player = players[playerId];
-        if (player.Stock.Count == 0)
-        {
-            Debug.Log($"【全展示パス】プレイヤー{playerId + 1}に手札がありません。");
-            return;
-        }
+        DisplayAllTreasures(new[] { playerId });
+    }
+
+    public void DisplayAllTreasures(int[] playerIds)
+    {
+        if (playerIds == null || Phase != TreasurePhase.Waiting) return;
         displaySelections.Clear(); requiredDisplayCounts.Clear(); displayPlayers.Clear();
-        displayPlayers.Add(player);
-        displaySelections[player] = new List<Treasure>(player.Stock);
-        requiredDisplayCounts[player] = player.Stock.Count;
-        Debug.Log($"<color=#FFD966>【脱落者の全展示】プレイヤー{playerId + 1}が手札{player.Stock.Count}枚を全て展示します。</color>");
+        foreach (int playerId in playerIds)
+        {
+            if (!ValidPlayer(playerId)) continue;
+            Player player = players[playerId];
+            if (player.Stock.Count == 0)
+            {
+                Debug.Log($"【全展示パス】プレイヤー{playerId + 1}に手札がありません。");
+                continue;
+            }
+            displayPlayers.Add(player);
+            displaySelections[player] = new List<Treasure>(player.Stock);
+            requiredDisplayCounts[player] = player.Stock.Count;
+            Debug.Log($"<color=#FFD966>【脱落者の全展示】プレイヤー{playerId + 1}が手札{player.Stock.Count}枚を全て展示します。</color>");
+        }
+        if (displayPlayers.Count == 0) return;
         StartCoroutine(ResolveDisplays());
     }
 
@@ -563,8 +587,10 @@ public class TreasureController : MonoBehaviour
             Player player = players[i];
             int score = VictoryScore(player);
             Debug.Log($"【勝利判定】P{player.PlayerId + 1}：本物換算{score}点" +
-                (blockedFromWinningThisTurn.Contains(player) ? "（今ターンは勝利不可）" : ""));
-            if (score >= 7 && !blockedFromWinningThisTurn.Contains(player)) reachedPlayers.Add(player);
+                (eliminatedPlayerIds.Contains(player.PlayerId) ? "（脱落・勝利対象外）" :
+                 blockedFromWinningThisTurn.Contains(player) ? "（今ターンは勝利不可）" : ""));
+            if (score >= 7 && !eliminatedPlayerIds.Contains(player.PlayerId) &&
+                !blockedFromWinningThisTurn.Contains(player)) reachedPlayers.Add(player);
         }
         if (reachedPlayers.Count == 0) return false;
 

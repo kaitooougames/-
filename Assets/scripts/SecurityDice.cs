@@ -17,10 +17,10 @@ public class SecurityDice : MonoBehaviour
     private void Awake()
     {
         // Awake で FindObjectOfType を呼び出す
-        player = FindObjectOfType<Player>();
-        player2 = FindObjectOfType<Player2>();
-        player3 = FindObjectOfType<Player3>();
-        player4 = FindObjectOfType<Player4>();
+        player = FindFirstObjectByType<Player>(FindObjectsInactive.Include);
+        player2 = FindFirstObjectByType<Player2>(FindObjectsInactive.Include);
+        player3 = FindFirstObjectByType<Player3>(FindObjectsInactive.Include);
+        player4 = FindFirstObjectByType<Player4>(FindObjectsInactive.Include);
     }
 
 
@@ -30,33 +30,41 @@ public class SecurityDice : MonoBehaviour
         foreach (var player in players)
         {
             Debug.Log($"[DEBUG] {player.name} - 選択カード: {player.SelectedCard?.GetType().Name}, isPhantomThief: {player.SelectedCard?.isPhantomThief}, HasBeenArrested: {player.HasBeenArrested}");
-            Debug.Log($"[DEBUG] {player2.name} - 選択カード: {player2.SelectedCard?.GetType().Name}, isPhantomThief: {player2.SelectedCard?.isPhantomThief}, HasBeenArrested: {player2.HasBeenArrested}");
-            Debug.Log($"[DEBUG] {player3.name} - 選択カード: {player3.SelectedCard?.GetType().Name}, isPhantomThief: {player3.SelectedCard?.isPhantomThief}, HasBeenArrested: {player3.HasBeenArrested}");
-            Debug.Log($"[DEBUG] {player4.name} - 選択カード: {player4.SelectedCard?.GetType().Name}, isPhantomThief: {player4.SelectedCard?.isPhantomThief}, HasBeenArrested: {player4.HasBeenArrested}");
+            if (IsParticipating(player2))
+                Debug.Log($"[DEBUG] {player2.name} - 選択カード: {player2.SelectedCard?.GetType().Name}, isPhantomThief: {player2.SelectedCard?.isPhantomThief}, HasBeenArrested: {player2.HasBeenArrested}");
+            if (IsParticipating(player3))
+                Debug.Log($"[DEBUG] {player3.name} - 選択カード: {player3.SelectedCard?.GetType().Name}, isPhantomThief: {player3.SelectedCard?.isPhantomThief}, HasBeenArrested: {player3.HasBeenArrested}");
+            if (IsParticipating(player4))
+                Debug.Log($"[DEBUG] {player4.name} - 選択カード: {player4.SelectedCard?.GetType().Name}, isPhantomThief: {player4.SelectedCard?.isPhantomThief}, HasBeenArrested: {player4.HasBeenArrested}");
 
-            if (player.SelectedCard != null && player.SelectedCard.isPhantomThief && !player.HasBeenArrested)
+            if (!player.isEliminated && player.SelectedCard != null && player.SelectedCard.isPhantomThief && !player.HasBeenArrested)
             {
                 return true; // 逮捕されていない怪盗がいる
             }
 
-            if (player2.SelectedCard != null && player2.SelectedCard.isPhantomThief && !player2.HasBeenArrested)
+            if (IsParticipating(player2) && !player2.isEliminated && player2.SelectedCard != null && player2.SelectedCard.isPhantomThief && !player2.HasBeenArrested)
             {
                 return true; // 逮捕されていない怪盗がいる
             }
 
-            if (player3.SelectedCard != null && player3.SelectedCard.isPhantomThief && !player3.HasBeenArrested)
+            if (IsParticipating(player3) && !player3.isEliminated && player3.SelectedCard != null && player3.SelectedCard.isPhantomThief && !player3.HasBeenArrested)
             {
                 return true; // 逮捕されていない怪盗がいる
             }
 
-            if (player4.SelectedCard != null && player4.SelectedCard.isPhantomThief && !player4.HasBeenArrested)
+            if (IsParticipating(player4) && !player4.isEliminated && player4.SelectedCard != null && player4.SelectedCard.isPhantomThief && !player4.HasBeenArrested)
             {
                 return true; // 逮捕されていない怪盗がいる
             }
 
-           
+
         }
           return false; // すべて逮捕済み
+    }
+
+    private static bool IsParticipating(MonoBehaviour participant)
+    {
+        return participant != null && participant.gameObject.activeInHierarchy;
     }
 
 
@@ -94,8 +102,7 @@ public class SecurityDice : MonoBehaviour
             }
 
             // Player2の処理
-            Player2 player2 = FindObjectOfType<Player2>();
-            if (player2?.SelectedCard != null && player2.SelectedCard.isPhantomThief && player2.HasBeenArrested == false)
+            if (IsParticipating(player2) && player2.SelectedCard != null && player2.SelectedCard.isPhantomThief && player2.HasBeenArrested == false)
             {
                 int chosenNumber = player2.SelectedCard.SelectedNumber;
                 Debug.Log($"{player2.name} の怪盗が選んだ数: {chosenNumber}");
@@ -112,8 +119,7 @@ public class SecurityDice : MonoBehaviour
             }
 
             // Player3の処理
-            Player3 player3 = FindObjectOfType<Player3>();
-            if (player3?.SelectedCard != null && player3.SelectedCard.isPhantomThief && player3.HasBeenArrested == false)
+            if (IsParticipating(player3) && player3.SelectedCard != null && player3.SelectedCard.isPhantomThief && player3.HasBeenArrested == false)
             {
                 int chosenNumber = player3.SelectedCard.SelectedNumber;
                 Debug.Log($"{player3.name} の怪盗が選んだ数: {chosenNumber}");
@@ -130,8 +136,7 @@ public class SecurityDice : MonoBehaviour
             }
 
             // Player4の処理
-            Player4 player4 = FindObjectOfType<Player4>();
-            if (player4?.SelectedCard != null && player4.SelectedCard.isPhantomThief && player4.HasBeenArrested == false)
+            if (IsParticipating(player4) && player4.SelectedCard != null && player4.SelectedCard.isPhantomThief && player4.HasBeenArrested == false)
             {
                 int chosenNumber = player4.SelectedCard.SelectedNumber;
                 Debug.Log($"{player4.name} の怪盗が選んだ数: {chosenNumber}");

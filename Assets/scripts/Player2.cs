@@ -192,11 +192,15 @@ public class Player2 : MonoBehaviour
     {
         if (isFirstOffense && arrestPenaltyCardPrefab != null)
         {
-            ArrestPenaltyCard penaltyCard = Instantiate(arrestPenaltyCardPrefab, new Vector3(-2.5f, 0f, 2.5f), Quaternion.identity).GetComponent<ArrestPenaltyCard>();
+            Vector3 spawnPosition = new Vector3(-2.5f, 0f, 2.5f);
+            Quaternion spawnRotation = Quaternion.identity;
+            Vector3 startPosition = spawnPosition + spawnRotation * Vector3.forward * 2.5f;
+            ArrestPenaltyCard penaltyCard = Instantiate(arrestPenaltyCardPrefab, startPosition, spawnRotation).GetComponent<ArrestPenaltyCard>();
 
             PenaltyCards2.Add(penaltyCard); // 🔹 生成したペナルティカードをリストに追加
 
             penaltyCard.SetPenaltyState(true);
+            penaltyCard.AnimateTo(spawnPosition);
             Debug.Log($"{name} に初犯のペナルティカードを表示しました。");
         }
     }
@@ -238,6 +242,7 @@ public class Player2 : MonoBehaviour
         HasBeenArrested = false;
 
         SelectedNumber = 0;
+        selectedCard = null;
 
     }
 
