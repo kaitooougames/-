@@ -34,6 +34,7 @@ public class Treasure : MonoBehaviour
     public Authenticity Authenticity => authenticity;
     public TreasureLocation Location => location;
     public Player Owner => owner;
+    public bool IsFaceUp => faceUp;
 
     public void Initialize(
         TreasureType treasureType,
@@ -256,6 +257,12 @@ public class Treasure : MonoBehaviour
         StartCoroutine(FlipToFaceUpRoutine(duration));
     }
 
+    public void AnimateFlipToFaceDown(float duration)
+    {
+        StopAllCoroutines();
+        StartCoroutine(FlipToFaceDownRoutine(duration));
+    }
+
     private IEnumerator FlipToFaceUpRoutine(float duration)
     {
         // 回転前に表＝Front、裏＝Backを固定し、以降は素材を一切変更しない。
@@ -277,6 +284,28 @@ public class Treasure : MonoBehaviour
 
         transform.rotation = startRotation * Quaternion.AngleAxis(-180f, Vector3.forward);
         faceUp = true;
+    }
+
+    private IEnumerator FlipToFaceDownRoutine(float duration)
+    {
+        ApplyDisplayedFace();
+        Quaternion startRotation = layoutRotation * Quaternion.AngleAxis(-180f, Vector3.forward);
+        Quaternion targetRotation = layoutRotation;
+        transform.rotation = startRotation;
+        float flipDuration = Mathf.Max(0.01f, duration);
+        float elapsed = 0f;
+
+        while (elapsed < flipDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / flipDuration);
+            t = t * t * (3f - 2f * t);
+            transform.rotation = Quaternion.Slerp(startRotation, targetRotation, t);
+            yield return null;
+        }
+
+        transform.rotation = targetRotation;
+        faceUp = false;
     }
 
     private IEnumerator AnimateRoutine(Vector3 targetPosition, Quaternion targetRotation, float duration)

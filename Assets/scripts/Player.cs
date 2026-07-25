@@ -114,6 +114,11 @@ public class Player : MonoBehaviour
             isFirstOffense = true;
             Debug.Log($"{name} は初犯になりました。次のターン怪盗を出せません。");
             ShowPenaltyCard();
+
+            // 次のカード選択画面を待たず、怪盗カードをその場で暗くして
+            // 「初犯中は選択できない」ことを見た目でも分かるようにする。
+            if (HandManager.Instance != null)
+                HandManager.Instance.RefreshPlayerOneCardAvailability();
         }
         else
         {

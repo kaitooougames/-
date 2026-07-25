@@ -15,6 +15,10 @@ public class TreasureTurnPrototype : MonoBehaviour
     [SerializeField] private float buttonMargin = 14f;
     [SerializeField, Range(1f, 10f)] private float handInertiaFriction = 3.2f;
     [SerializeField] private float handMaxFlickSpeed = 2400f;
+    [Header("画面UI調整")]
+    [SerializeField, Range(1f, 3f)] private float uiScale = 2f;
+    [SerializeField] private Vector2 instructionOffset = new Vector2(0f, 14f);
+    [SerializeField] private Vector2 treasureButtonOffset = Vector2.zero;
 
     private bool turnRunning;
     private bool draggingHand;
@@ -45,14 +49,16 @@ public class TreasureTurnPrototype : MonoBehaviour
         {
             GUIStyle instructionStyle = new GUIStyle(GUI.skin.label)
             {
-                fontSize = 20,
+                fontSize = Mathf.RoundToInt(20f * uiScale),
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
                 wordWrap = true,
                 normal = { textColor = Color.white }
             };
-            float instructionWidth = Mathf.Min(620f, Screen.width - 40f);
-            Rect instructionRect = new Rect((Screen.width - instructionWidth) * 0.5f, 14f, instructionWidth, 58f);
+            float instructionWidth = Mathf.Min(900f * uiScale, Screen.width - 40f * uiScale);
+            Rect instructionRect = new Rect((Screen.width - instructionWidth) * 0.5f +
+                instructionOffset.x * uiScale, instructionOffset.y * uiScale,
+                instructionWidth, 58f * uiScale);
             GUI.Label(instructionRect, treasureController.InstructionText, instructionStyle);
         }
 
@@ -62,13 +68,14 @@ public class TreasureTurnPrototype : MonoBehaviour
 
         GUIStyle style = new GUIStyle(GUI.skin.button)
         {
-            fontSize = 14,
+            fontSize = Mathf.RoundToInt(14f * uiScale),
             fontStyle = FontStyle.Bold
         };
         string label = canStart ? "ランダムお宝ターン開始" : "お宝ターン進行中…";
-        const float width = 210f;
-        const float height = 42f;
-        Rect buttonRect = new Rect(buttonMargin, Screen.height - height - buttonMargin, width, height);
+        float width = 210f * uiScale;
+        float height = 42f * uiScale;
+        Rect buttonRect = new Rect(buttonMargin * uiScale,
+            Screen.height - height - buttonMargin * uiScale, width, height);
         if (GUI.Button(buttonRect, label, style)) RunRandomTurn();
 
         if (treasureController != null)
@@ -76,35 +83,47 @@ public class TreasureTurnPrototype : MonoBehaviour
             GUI.enabled = true;
             GUIStyle treasureStyle = new GUIStyle(GUI.skin.button)
             {
-                fontSize = 15,
+                fontSize = Mathf.RoundToInt(15f * uiScale),
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter
             };
             string treasureLabel = treasureController.PlayerOneHandVisible
                 ? "閉\nじ\nる\n◀"
                 : "宝\nを\n見\nる\n▶";
-            float treasureHeight = 155f;
-            Rect treasureButton = new Rect(0f, (Screen.height - treasureHeight) * 0.5f, 38f, treasureHeight);
+            float treasureHeight = 155f * uiScale;
+            Rect treasureButton = new Rect(treasureButtonOffset.x * uiScale,
+                (Screen.height - treasureHeight) * 0.5f + treasureButtonOffset.y * uiScale,
+                38f * uiScale, treasureHeight);
+            global::CameraController cameraController = Camera.main != null
+                ? Camera.main.GetComponent<global::CameraController>()
+                : null;
+            bool displayViewLocked = cameraController != null &&
+                (cameraController.PlayerDisplayViewActive || cameraController.IsCameraMoving);
+            GUI.enabled = !displayViewLocked;
             if (GUI.Button(treasureButton, treasureLabel, treasureStyle))
                 treasureController.TogglePlayerOneHand();
 
             if (treasureController.PlayerOneHandVisible) HandleHandScrollInput();
 
+            GUI.enabled = true;
             GUI.enabled = treasureController.Phase == TreasurePhase.Waiting;
             string freeLabel = treasureController.FreeInteractionMode ? "FREE：ON" : "FREE：OFF";
-            if (GUI.Button(new Rect(Screen.width - 118f, 14f, 104f, 38f), freeLabel, style))
+            if (GUI.Button(new Rect(Screen.width - 118f * uiScale, 14f * uiScale,
+                104f * uiScale, 38f * uiScale), freeLabel, style))
                 treasureController.ToggleFreeInteractionMode();
-            if (GUI.Button(new Rect(Screen.width - 158f, 60f, 144f, 38f), "P1 手札を全部展示", style))
+            if (GUI.Button(new Rect(Screen.width - 158f * uiScale, 60f * uiScale,
+                144f * uiScale, 38f * uiScale), "P1 手札を全部展示", style))
                 treasureController.DisplayAllTreasures(0);
 
             GUI.enabled = !turnRunning && (treasureController.Phase == TreasurePhase.Waiting ||
                 treasureController.Phase == TreasurePhase.GameOver);
-            float playerButtonY = 106f;
+            float playerButtonY = 106f * uiScale;
             for (int count = 2; count <= 4; count++)
             {
                 GUIStyle countStyle = new GUIStyle(style);
                 if (treasureController.PlayerCount == count) countStyle.fontStyle = FontStyle.Bold;
-                if (GUI.Button(new Rect(Screen.width - 158f + (count - 2) * 48f, playerButtonY, 44f, 34f),
+                if (GUI.Button(new Rect(Screen.width - 158f * uiScale + (count - 2) * 48f * uiScale,
+                    playerButtonY, 44f * uiScale, 34f * uiScale),
                     $"{count}人", countStyle))
                 {
                     treasureController.RestartWithPlayerCount(count);
@@ -113,7 +132,8 @@ public class TreasureTurnPrototype : MonoBehaviour
             }
 
             GUI.enabled = true;
-            if (GUI.Button(new Rect(Screen.width - 158f, 148f, 144f, 38f),
+            if (GUI.Button(new Rect(Screen.width - 158f * uiScale, 148f * uiScale,
+                144f * uiScale, 38f * uiScale),
                 "全カードをめくる", style))
                 treasureController.TestRevealAllDisplayedTreasures();
         }

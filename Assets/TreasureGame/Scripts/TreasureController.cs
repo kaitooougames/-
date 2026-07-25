@@ -43,6 +43,7 @@ public class TreasureController : MonoBehaviour
     private int stealsRemaining;
     private bool freeMoveInProgress;
     private bool endTurnAfterCurrentDisplay;
+    private bool arrestRewardDisplayActive;
     private string gameResultText = string.Empty;
     public TreasurePhase Phase { get; private set; } = TreasurePhase.Waiting;
     public int PlayerCount => playerCount;
@@ -77,7 +78,9 @@ public class TreasureController : MonoBehaviour
                     displaySelections.TryGetValue(playerOne, out List<Treasure> selected))
                 {
                     int remaining = Mathf.Max(0, required - selected.Count);
-                    if (remaining > 0) return $"展示する宝をあと{remaining}つ選んでください。";
+                    if (remaining > 0) return arrestRewardDisplayActive
+                        ? $"檻の逮捕報酬により、展示する宝をあと{remaining}つ選んでください。"
+                        : $"展示する宝をあと{remaining}つ選んでください。";
                 }
                 return string.Empty;
             }
@@ -110,6 +113,43 @@ public class TreasureController : MonoBehaviour
         if (players.Count == 0) return;
         players[0].SetHandVisible(!players[0].HandVisible, handSlideDuration);
         RefreshInteraction();
+    }
+
+    public void SetPlayerOneHandVisible(bool visible)
+    {
+        if (players.Count == 0 || players[0].HandVisible == visible) return;
+        players[0].SetHandVisible(visible, handSlideDuration);
+        RefreshInteraction();
+    }
+
+    public void RevealPlayerDisplay(int playerId)
+    {
+        if (!ValidPlayer(playerId)) return;
+        var facedownCards = new List<Treasure>();
+        foreach (Treasure card in players[playerId].DisplayedTreasures)
+            if (card != null && !card.IsFaceUp) facedownCards.Add(card);
+        if (facedownCards.Count == 0)
+        {
+            Debug.Log($"【真贋確認】Player{playerId + 1}に未公開の展示品はありません。");
+            return;
+        }
+        foreach (Treasure card in facedownCards)
+            card.AnimateFlipToFaceUp(victoryFlipDuration);
+        Debug.Log($"<color=#FFD966>【真贋確認】Player{playerId + 1}の展示品を公開します。</color>");
+    }
+
+    public void HidePlayerDisplay(int playerId)
+    {
+        if (!ValidPlayer(playerId)) return;
+        int hiddenCount = 0;
+        foreach (Treasure card in players[playerId].DisplayedTreasures)
+        {
+            if (card == null || !card.IsFaceUp) continue;
+            card.AnimateFlipToFaceDown(victoryFlipDuration);
+            hiddenCount++;
+        }
+        if (hiddenCount > 0)
+            Debug.Log($"<color=#B0B0B0>【真贋確認終了】Player{playerId + 1}の展示品を裏向きへ戻します。</color>");
     }
 
     public void TestRevealAllDisplayedTreasures()
@@ -240,7 +280,11 @@ public class TreasureController : MonoBehaviour
             requiredDisplayCounts[player] = required;
             displaySelections[player] = new List<Treasure>();
         }
-        if (displayPlayers.Count == 0) { Phase = TreasurePhase.Waiting; RefreshInteraction(); return; }
+        if (displayPlayers.Count == 0)
+        {
+            arrestRewardDisplayActive = false;
+            Phase = TreasurePhase.Waiting; RefreshInteraction(); return;
+        }
         if (requiredDisplayCounts.ContainsKey(players[0]) && !players[0].HandVisible)
             players[0].SetHandVisible(true, handSlideDuration);
         Phase = TreasurePhase.SelectingDisplays;
@@ -284,7 +328,7 @@ public class TreasureController : MonoBehaviour
         foreach (int id in playerIds)
             if (ValidPlayer(id) && !queuedArrestRewardPlayerIds.Contains(id))
                 queuedArrestRewardPlayerIds.Add(id);
-        Debug.Log($"【逮捕成功報酬】{queuedArrestRewardPlayerIds.Count}人が怪盗展示後に1枚展示します。");
+        Debug.Log($"【檻の逮捕報酬】{queuedArrestRewardPlayerIds.Count}人が怪盗展示後に1枚展示します。");
     }
 
     // 行動カード開示時に怪盗プレイヤーと宣言枚数を渡す。枚数の大きい順に実行する。
@@ -370,6 +414,7 @@ public class TreasureController : MonoBehaviour
             }
         }
         yield return new WaitForSeconds(moveDuration);
+        arrestRewardDisplayActive = false;
         if (displaySelections.ContainsKey(players[0]) && players[0].HandVisible)
             players[0].SetHandVisible(false, handSlideDuration);
         if (endTurnAfterCurrentDisplay)
@@ -560,6 +605,9 @@ public class TreasureController : MonoBehaviour
         int[] rewardPlayers = queuedArrestRewardPlayerIds.ToArray();
         queuedArrestRewardPlayerIds.Clear();
         endTurnAfterCurrentDisplay = true;
+        arrestRewardDisplayActive = true;
+        string rewardNames = string.Join("・", System.Array.ConvertAll(rewardPlayers, id => $"Player{id + 1}"));
+        Debug.Log($"<color=#FFD966>【檻の逮捕報酬により展示】{rewardNames}が宝を1枚展示します。</color>");
         BeginDisplayPhase(rewardPlayers);
         if (Phase == TreasurePhase.Waiting)
         {

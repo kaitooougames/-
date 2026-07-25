@@ -11,6 +11,8 @@ public class CameraController : MonoBehaviour
 
     public float moveSpeed = 0.8f;
     private bool isCameraMoving = false;
+    private bool playerDisplayViewActive;
+    private Quaternion displayViewReturnRotation;
     public SecurityDice securityDice; // Unity Inspector で設定
     private List<Player> players; // プレイヤーリスト
     private bool isFlipping = false;
@@ -22,6 +24,8 @@ public class CameraController : MonoBehaviour
     public Player3 Player3;
     public Player4 Player4;
     public ArrestEffect arrestEffect; // ← インスペクターでアタッチする
+    public bool PlayerDisplayViewActive => playerDisplayViewActive;
+    public bool IsCameraMoving => isCameraMoving;
 
 
     private void Start()
@@ -78,6 +82,34 @@ public class CameraController : MonoBehaviour
         isCameraMoving = false;
     }
 
+    public void SetPlayerDisplayView(bool active)
+    {
+        if (isCameraMoving || playerDisplayViewActive == active) return;
+        if (active) displayViewReturnRotation = transform.rotation;
+        StartCoroutine(MovePlayerDisplayView(active));
+    }
+
+    private IEnumerator MovePlayerDisplayView(bool active)
+    {
+        isCameraMoving = true;
+        Quaternion startRotation = transform.rotation;
+        Quaternion targetRotation = active
+            ? Quaternion.Euler(73f, transform.rotation.eulerAngles.y, transform.rotation.eulerAngles.z)
+            : displayViewReturnRotation;
+        float duration = 0.55f;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            float t = Mathf.SmoothStep(0f, 1f, elapsed / duration);
+            transform.rotation = Quaternion.Slerp(startRotation, targetRotation, t);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        transform.rotation = targetRotation;
+        playerDisplayViewActive = active;
+        isCameraMoving = false;
+    }
+
     private void BeginTreasureDisplaysFromActionCards()
     {
         TreasureGame.TreasureController treasureController =
@@ -87,16 +119,16 @@ public class CameraController : MonoBehaviour
 
         var displayPlayers = new List<int>();
         if (Player != null && !Player.isEliminated && Player.SelectedCard != null && Player.SelectedCard.isExhibit)
-            displayPlayers.Add(0);
+            displayPlayers.Add(ToTreasurePlayerId(0));
         if (Player2 != null && Player2.gameObject.activeInHierarchy && !Player2.isEliminated &&
             Player2.SelectedCard != null && Player2.SelectedCard.isExhibit)
-            displayPlayers.Add(1);
+            displayPlayers.Add(ToTreasurePlayerId(1));
         if (Player3 != null && Player3.gameObject.activeInHierarchy && !Player3.isEliminated &&
             Player3.SelectedCard != null && Player3.SelectedCard.isExhibit)
-            displayPlayers.Add(2);
+            displayPlayers.Add(ToTreasurePlayerId(2));
         if (Player4 != null && Player4.gameObject.activeInHierarchy && !Player4.isEliminated &&
             Player4.SelectedCard != null && Player4.SelectedCard.isExhibit)
-            displayPlayers.Add(3);
+            displayPlayers.Add(ToTreasurePlayerId(3));
 
         if (displayPlayers.Count == 0) return;
 
@@ -107,7 +139,7 @@ public class CameraController : MonoBehaviour
         // Player1は手動選択。CPUプレイヤーは選べる手札から1枚を自動選択する。
         foreach (int playerId in displayPlayers)
         {
-            if (playerId == 0) continue;
+            if (playerId == ToTreasurePlayerId(0)) continue;
             foreach (TreasureGame.Treasure treasure in treasures)
             {
                 if (treasure.Owner == null || treasure.Owner.PlayerId != playerId ||
@@ -220,18 +252,18 @@ public class CameraController : MonoBehaviour
         var robberPlayers = new List<int>();
         var robberyCounts = new List<int>();
 
-        AddRobberyDeclaration(Player, 0, Player != null ? Player.SelectedCard : null,
+        AddRobberyDeclaration(Player, ToTreasurePlayerId(0), Player != null ? Player.SelectedCard : null,
             Player != null ? Player.SelectedNumber : 0,
             Player != null && Player.HasBeenArrested, Player != null && Player.isEliminated,
             robberPlayers, robberyCounts);
         if (Player2 != null && Player2.gameObject.activeInHierarchy)
-            AddRobberyDeclaration(Player2, 1, Player2.SelectedCard, Player2.SelectedNumber,
+            AddRobberyDeclaration(Player2, ToTreasurePlayerId(1), Player2.SelectedCard, Player2.SelectedNumber,
                 Player2.HasBeenArrested, Player2.isEliminated, robberPlayers, robberyCounts);
         if (Player3 != null && Player3.gameObject.activeInHierarchy)
-            AddRobberyDeclaration(Player3, 2, Player3.SelectedCard, Player3.SelectedNumber,
+            AddRobberyDeclaration(Player3, ToTreasurePlayerId(2), Player3.SelectedCard, Player3.SelectedNumber,
                 Player3.HasBeenArrested, Player3.isEliminated, robberPlayers, robberyCounts);
         if (Player4 != null && Player4.gameObject.activeInHierarchy)
-            AddRobberyDeclaration(Player4, 3, Player4.SelectedCard, Player4.SelectedNumber,
+            AddRobberyDeclaration(Player4, ToTreasurePlayerId(3), Player4.SelectedCard, Player4.SelectedNumber,
                 Player4.HasBeenArrested, Player4.isEliminated, robberPlayers, robberyCounts);
 
         Debug.Log($"<color=#FF9F70>【行動カード→怪盗】逮捕されていない怪盗 {robberPlayers.Count}人</color>");
@@ -298,14 +330,14 @@ public class CameraController : MonoBehaviour
     {
         var cagePlayers = new List<int>();
         int thiefCount = 0;
-        CountActionForCageReward(0, Player != null ? Player.SelectedCard : null,
+        CountActionForCageReward(ToTreasurePlayerId(0), Player != null ? Player.SelectedCard : null,
             Player != null && Player.isEliminated, cagePlayers, ref thiefCount);
         if (Player2 != null && Player2.gameObject.activeInHierarchy)
-            CountActionForCageReward(1, Player2.SelectedCard, Player2.isEliminated, cagePlayers, ref thiefCount);
+            CountActionForCageReward(ToTreasurePlayerId(1), Player2.SelectedCard, Player2.isEliminated, cagePlayers, ref thiefCount);
         if (Player3 != null && Player3.gameObject.activeInHierarchy)
-            CountActionForCageReward(2, Player3.SelectedCard, Player3.isEliminated, cagePlayers, ref thiefCount);
+            CountActionForCageReward(ToTreasurePlayerId(2), Player3.SelectedCard, Player3.isEliminated, cagePlayers, ref thiefCount);
         if (Player4 != null && Player4.gameObject.activeInHierarchy)
-            CountActionForCageReward(3, Player4.SelectedCard, Player4.isEliminated, cagePlayers, ref thiefCount);
+            CountActionForCageReward(ToTreasurePlayerId(3), Player4.SelectedCard, Player4.isEliminated, cagePlayers, ref thiefCount);
 
         bool cagesSucceeded = cagePlayers.Count > 0 && thiefCount >= cagePlayers.Count;
         Debug.Log($"【檻報酬判定】怪盗{thiefCount}人 / 檻{cagePlayers.Count}人 → " +
@@ -323,13 +355,13 @@ public class CameraController : MonoBehaviour
 
     private void SyncEliminatedPlayers(TreasureGame.TreasureController treasureController)
     {
-        if (Player != null && Player.isEliminated) treasureController.SetPlayerEliminated(0);
+        if (Player != null && Player.isEliminated) treasureController.SetPlayerEliminated(ToTreasurePlayerId(0));
         if (Player2 != null && Player2.gameObject.activeInHierarchy && Player2.isEliminated)
-            treasureController.SetPlayerEliminated(1);
+            treasureController.SetPlayerEliminated(ToTreasurePlayerId(1));
         if (Player3 != null && Player3.gameObject.activeInHierarchy && Player3.isEliminated)
-            treasureController.SetPlayerEliminated(2);
+            treasureController.SetPlayerEliminated(ToTreasurePlayerId(2));
         if (Player4 != null && Player4.gameObject.activeInHierarchy && Player4.isEliminated)
-            treasureController.SetPlayerEliminated(3);
+            treasureController.SetPlayerEliminated(ToTreasurePlayerId(3));
     }
 
     private static bool TrySelectCpuTreasure(TreasureGame.TreasureController treasureController)
@@ -374,10 +406,10 @@ public class CameraController : MonoBehaviour
         if (treasureController != null && treasureController.Phase == TreasureGame.TreasurePhase.Waiting)
         {
             var eliminatedPlayers = new List<int>();
-            if (Player != null && Player.isEliminated) eliminatedPlayers.Add(0);
-            if (Player2 != null && Player2.gameObject.activeInHierarchy && Player2.isEliminated) eliminatedPlayers.Add(1);
-            if (Player3 != null && Player3.gameObject.activeInHierarchy && Player3.isEliminated) eliminatedPlayers.Add(2);
-            if (Player4 != null && Player4.gameObject.activeInHierarchy && Player4.isEliminated) eliminatedPlayers.Add(3);
+            if (Player != null && Player.isEliminated) eliminatedPlayers.Add(ToTreasurePlayerId(0));
+            if (Player2 != null && Player2.gameObject.activeInHierarchy && Player2.isEliminated) eliminatedPlayers.Add(ToTreasurePlayerId(1));
+            if (Player3 != null && Player3.gameObject.activeInHierarchy && Player3.isEliminated) eliminatedPlayers.Add(ToTreasurePlayerId(2));
+            if (Player4 != null && Player4.gameObject.activeInHierarchy && Player4.isEliminated) eliminatedPlayers.Add(ToTreasurePlayerId(3));
 
             if (eliminatedPlayers.Count > 0)
             {
@@ -394,6 +426,12 @@ public class CameraController : MonoBehaviour
         // 行動カードの回収アニメーションが終わる分だけ待つ。
         yield return new WaitForSeconds(2f);
         cardInteraction.EnableCardClicks(); // カードクリック再開
+        if (handManager != null) handManager.RefreshPlayerOneCardAvailability();
         isFlipping = false;
+    }
+
+    private int ToTreasurePlayerId(int actionSeatId)
+    {
+        return handManager != null ? handManager.ToTreasurePlayerId(actionSeatId) : actionSeatId;
     }
 }

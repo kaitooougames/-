@@ -12,7 +12,7 @@ public class Player : MonoBehaviour
     [SerializeField] private List<Treasure> displayedTreasures = new List<Treasure>();
     [SerializeField] private float handCardSpacing = 0.30f;
     [SerializeField, Min(1)] private int handVisibleCardCount = 12;
-    [SerializeField] private float handStorageDistance = 4f;
+    [SerializeField] private float handStorageDistance = 6.5f;
     [SerializeField] private float displayColumnSpacing = 0.50f;
     [SerializeField] private float displayRowSpacing = 0.36f;
     [SerializeField] private float displayMaxDepth = 1.5f;

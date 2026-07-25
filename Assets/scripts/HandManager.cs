@@ -13,9 +13,26 @@ public class HandManager : MonoBehaviour
     [SerializeField] private float handSlideSpeed = 8f;
     [SerializeField] private Vector3 closedHandPosition = new Vector3(0f, 3f, -4f);
     [SerializeField, Range(2, 4)] private int actionPlayerCount = 4;
+    [Header("画面UI調整")]
+    [SerializeField, Range(1f, 3f)] private float uiScale = 2f;
+    [SerializeField] private Vector2 actionButtonOffset = Vector2.zero;
+    [SerializeField] private Vector2 displayButtonOffset = new Vector2(0f, -105f);
+    [SerializeField] private Vector2 playerCountsOffset = new Vector2(0f, -40f);
+    [SerializeField] private Vector2 dayLabelOffset = new Vector2(-240f, 16f);
+    private int currentDay = 1;
 
     public bool ActionHandVisible => actionHandVisible;
     public int ActionPlayerCount => actionPlayerCount;
+
+    public int ToTreasurePlayerId(int actionSeatId)
+    {
+        if (actionPlayerCount == 3)
+        {
+            if (actionSeatId == 2) return 1;
+            if (actionSeatId == 3) return 2;
+        }
+        return actionSeatId;
+    }
 
     public void EndGame()
     {
@@ -35,6 +52,7 @@ public class HandManager : MonoBehaviour
         ApplyPlayerCount(actionPlayerCount);
         SetInitialPositions(); // 初期位置を設定
         Invoke("ArrangeHand", 1.0f); // 1秒後に手札を並べる
+        Invoke(nameof(RefreshPlayerOneCardAvailability), 1.05f);
     }
 
     // **カードの初期位置を (0,3,-4) に設定**
@@ -122,8 +140,13 @@ public class HandManager : MonoBehaviour
     public void ToggleActionHand()
     {
         if (cardSelected) return;
+        SetActionHandVisible(!actionHandVisible);
+    }
 
-        actionHandVisible = !actionHandVisible;
+    public void SetActionHandVisible(bool visible)
+    {
+        if (actionHandVisible == visible) return;
+        actionHandVisible = visible;
         float[] basePositions = { -0.96f, -0.32f, 0.32f, 0.96f };
         for (int i = 0; i < cards.Count; i++)
         {
@@ -134,8 +157,23 @@ public class HandManager : MonoBehaviour
                 ? GetOpenCardPosition(i, basePositions)
                 : closedHandPosition;
             card.MoveTo(target, handSlideSpeed);
-            if (actionHandVisible) card.EnableClick();
-            else card.DisableClick();
+            // 開閉のために移動しているだけなので、カードは暗くしない。
+            if (!actionHandVisible) card.DisableClick(false);
+        }
+        if (actionHandVisible) RefreshPlayerOneCardAvailability();
+    }
+
+    public void RefreshPlayerOneCardAvailability()
+    {
+        Player playerOne = FindFirstObjectByType<Player>(FindObjectsInactive.Include);
+        bool thiefBlocked = playerOne != null && playerOne.IsFirstOffense();
+        foreach (CardInteraction card in cards)
+        {
+            if (card == null) continue;
+            if (!actionHandVisible || gameFinished || (thiefBlocked && card.isPhantomThief))
+                card.DisableClick();
+            else
+                card.EnableClick();
         }
     }
 
@@ -143,23 +181,71 @@ public class HandManager : MonoBehaviour
     {
         GUIStyle style = new GUIStyle(GUI.skin.button)
         {
-            fontSize = 15,
+            fontSize = Mathf.RoundToInt(15f * uiScale),
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter
         };
 
-        const float width = 38f;
-        const float height = 155f;
+        float width = 38f * uiScale;
+        float height = 155f * uiScale;
         // お宝手札ボタンのすぐ上に並べる。
-        Rect buttonRect = new Rect(0f, (Screen.height - height) * 0.5f - height - 10f, width, height);
-        GUI.enabled = !cardSelected && !gameFinished;
+        Rect buttonRect = new Rect(actionButtonOffset.x * uiScale,
+            (Screen.height - height) * 0.5f - height - 10f + actionButtonOffset.y * uiScale,
+            width, height);
+        CameraController cameraController = Camera.main != null
+            ? Camera.main.GetComponent<CameraController>()
+            : null;
+        bool displayViewLocked = cameraController != null &&
+            (cameraController.PlayerDisplayViewActive || cameraController.IsCameraMoving);
+        GUI.enabled = !cardSelected && !gameFinished && !displayViewLocked;
         string label = actionHandVisible
             ? "閉\nじ\nる\n◀"
             : "行\n動\nカ\nー\nド\nを\n見\nる\n▶";
         if (GUI.Button(buttonRect, label, style)) ToggleActionHand();
         GUI.enabled = true;
 
+        DrawPlayerDisplayControls(style);
         DrawPlayerCounts();
+        DrawDayCounter();
+    }
+
+    private void DrawPlayerDisplayControls(GUIStyle buttonStyle)
+    {
+        CameraController cameraController = Camera.main != null
+            ? Camera.main.GetComponent<CameraController>()
+            : null;
+        TreasureGame.TreasureController treasureController =
+            FindFirstObjectByType<TreasureGame.TreasureController>();
+        if (cameraController == null || treasureController == null) return;
+
+        bool viewing = cameraController.PlayerDisplayViewActive;
+        bool canOpen = !cardSelected && !gameFinished &&
+            treasureController.Phase == TreasureGame.TreasurePhase.Waiting &&
+            !cameraController.IsCameraMoving;
+        GUI.enabled = viewing || canOpen;
+
+        float width = 280f * uiScale;
+        float height = 50f * uiScale;
+        float y = Screen.height + displayButtonOffset.y * uiScale;
+        float firstX = (Screen.width - width) * 0.5f + displayButtonOffset.x * uiScale;
+        string viewLabel = viewing ? "展示場を見るのをやめる" : "自分の展示場を見る（真贋チェック）";
+        if (GUI.Button(new Rect(firstX, y, width, height), viewLabel, buttonStyle))
+        {
+            if (!viewing)
+            {
+                SetActionHandVisible(false);
+                treasureController.SetPlayerOneHandVisible(false);
+                treasureController.RevealPlayerDisplay(0);
+                cameraController.SetPlayerDisplayView(true);
+            }
+            else
+            {
+                treasureController.HidePlayerDisplay(0);
+                cameraController.SetPlayerDisplayView(false);
+                SetActionHandVisible(true);
+            }
+        }
+        GUI.enabled = true;
     }
 
     private void DrawPlayerCounts()
@@ -173,7 +259,7 @@ public class HandManager : MonoBehaviour
 
         GUIStyle style = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 17,
+            fontSize = Mathf.RoundToInt(17f * uiScale),
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
             normal = { textColor = Color.white }
@@ -183,9 +269,9 @@ public class HandManager : MonoBehaviour
         if (actionPlayerCount == 2 || actionPlayerCount == 4) activeIds.Add(1);
         if (actionPlayerCount >= 3) { activeIds.Add(2); activeIds.Add(3); }
 
-        float width = 190f;
+        float width = 210f * uiScale;
         float totalWidth = width * activeIds.Count;
-        float startX = (Screen.width - totalWidth) * 0.5f;
+        float startX = (Screen.width - totalWidth) * 0.5f + playerCountsOffset.x * uiScale;
         for (int i = 0; i < activeIds.Count; i++)
         {
             int id = activeIds[i];
@@ -193,10 +279,27 @@ public class HandManager : MonoBehaviour
                 : id == 1 ? (player2 != null && player2.player2Cards != null ? player2.player2Cards.Count : 0)
                 : id == 2 ? (player3 != null && player3.player3Cards != null ? player3.player3Cards.Count : 0)
                 : (player4 != null && player4.player4Cards != null ? player4.player4Cards.Count : 0);
-            int treasureCount = treasureController != null ? treasureController.GetHandCount(id) : 0;
-            GUI.Label(new Rect(startX + width * i, Screen.height - 34f, width, 30f),
+            int treasureId = ToTreasurePlayerId(id);
+            int treasureCount = treasureController != null ? treasureController.GetHandCount(treasureId) : 0;
+            GUI.Label(new Rect(startX + width * i, Screen.height + playerCountsOffset.y * uiScale,
+                    width, 34f * uiScale),
                 $"P{id + 1}  行動:{actionCount}  宝:{treasureCount}", style);
         }
+    }
+
+    private void DrawDayCounter()
+    {
+        GUIStyle style = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = Mathf.RoundToInt(24f * uiScale),
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = new Color(1f, 0.86f, 0.35f) }
+        };
+        float width = 110f * uiScale;
+        float height = 48f * uiScale;
+        GUI.Label(new Rect(Screen.width + dayLabelOffset.x * uiScale,
+            dayLabelOffset.y * uiScale, width, height), $"{currentDay}日目", style);
     }
     public void SelectCard(CardInteraction selectedCard)
     {
@@ -231,6 +334,7 @@ public class HandManager : MonoBehaviour
 
     public void MoveCardsAfterThiefPhase()
     {
+        currentDay++;
         actionHandVisible = true;
         Start();
         cardSelected = false;

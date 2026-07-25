@@ -12,7 +12,18 @@ public class CardInteraction : MonoBehaviour
     private bool hasMoved = false;
     private HandManager handManager;
   
-    public bool isClickable { get; set; } = true; // 🔹 アクセス修正
+    private bool clickable = true;
+    private Renderer[] visualRenderers;
+    private MaterialPropertyBlock clickAppearanceBlock;
+    public bool isClickable
+    {
+        get => clickable;
+        set
+        {
+            clickable = value;
+            RefreshClickAppearance();
+        }
+    }
     private bool isFlipping = false;
     private float flipSpeed = 5f;
     public static event System.Action OnAllCardsFlipped; // 全カードがめくられた後のイベント
@@ -43,11 +54,24 @@ public class CardInteraction : MonoBehaviour
     }
 
 
+    private void Awake()
+    {
+        visualRenderers = GetComponentsInChildren<Renderer>(true);
+        clickAppearanceBlock = new MaterialPropertyBlock();
+        RefreshClickAppearance();
+    }
+
     void Start()
     {
         originalPosition = transform.position; // 初期位置を保持
         originalRotation = transform.rotation;
         if (numberSelectionPanel) numberSelectionPanel.SetActive(false);
+    }
+
+    private void RefreshClickAppearance()
+    {
+        float brightness = clickable ? 1f : 0.32f;
+        SetClickBrightness(brightness);
     }
 
     void Update()
@@ -111,7 +135,7 @@ public class CardInteraction : MonoBehaviour
             if (isClickable)
             {
                 ShowNumberSelection();
-                isClickable = false;
+                DisableClick(false);
             }
         }
         else // 展示カードや檻カードなど
@@ -122,7 +146,7 @@ public class CardInteraction : MonoBehaviour
 
             MoveToCenter(player.SelectedNumber);
             player.SelectCard(this, 0);
-            isClickable = false;
+            DisableClick(false);
         }
 
         handManager.SelectCard(this); // ハンドUIの選択管理
@@ -166,9 +190,10 @@ public class CardInteraction : MonoBehaviour
         handManager = manager;
     }
 
-    public void DisableClick()
+    public void DisableClick(bool dim = true)
     {
         isClickable = false;
+        if (!dim) SetClickBrightness(1f);
     }
 
     public void EnableClick()
@@ -223,7 +248,9 @@ public class CardInteraction : MonoBehaviour
         Debug.Log("FlipCard() が呼ばれた: " + Time.frameCount);
         Debug.Log("isPhantomThief: " + isPhantomThief + ", selectedStealNumber: " + selectedStealNumber);
 
-
+        // 選択不可の暗転は手札にある間だけ使用する。
+        // 公開後の裏面まで暗くならないよう、反転開始時に見た目だけ通常へ戻す。
+        SetClickBrightness(1f);
         targetRotation = Quaternion.Euler(transform.rotation.eulerAngles.x + 180, transform.rotation.eulerAngles.y + 180, transform.rotation.eulerAngles.z);
         isFlipping = true;
 
@@ -245,6 +272,40 @@ public class CardInteraction : MonoBehaviour
             }
         }
 
+    }
+
+    private void SetClickBrightness(float brightness)
+    {
+        if (visualRenderers == null || clickAppearanceBlock == null) return;
+
+        // 通常表示へ戻す場合は白色を上書きするのではなく、
+        // 暗転用のPropertyBlock自体を外して元マテリアルを復元する。
+        if (brightness >= 0.999f)
+        {
+            foreach (Renderer visualRenderer in visualRenderers)
+            {
+                if (visualRenderer == null) continue;
+                int materialCount = Mathf.Max(1, visualRenderer.sharedMaterials.Length);
+                for (int materialIndex = 0; materialIndex < materialCount; materialIndex++)
+                    visualRenderer.SetPropertyBlock(null, materialIndex);
+            }
+            return;
+        }
+
+        Color tint = new Color(brightness, brightness, brightness, 1f);
+        foreach (Renderer visualRenderer in visualRenderers)
+        {
+            if (visualRenderer == null) continue;
+            int materialCount = Mathf.Max(1, visualRenderer.sharedMaterials.Length);
+            for (int materialIndex = 0; materialIndex < materialCount; materialIndex++)
+            {
+                clickAppearanceBlock.Clear();
+                visualRenderer.GetPropertyBlock(clickAppearanceBlock, materialIndex);
+                clickAppearanceBlock.SetColor("_BaseColor", tint);
+                clickAppearanceBlock.SetColor("_Color", tint);
+                visualRenderer.SetPropertyBlock(clickAppearanceBlock, materialIndex);
+            }
+        }
     }
 
 

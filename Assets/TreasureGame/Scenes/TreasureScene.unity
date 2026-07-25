@@ -816,7 +816,7 @@ MonoBehaviour:
   displayedTreasures: []
   handCardSpacing: 0.3
   handVisibleCardCount: 12
-  handStorageDistance: 4
+  handStorageDistance: 6.5
   displayColumnSpacing: 0.52
   displayRowSpacing: 0.36
   displayMaxDepth: 1.3
@@ -875,7 +875,7 @@ MonoBehaviour:
   displayedTreasures: []
   handCardSpacing: 0.3
   handVisibleCardCount: 12
-  handStorageDistance: 4
+  handStorageDistance: 6.5
   displayColumnSpacing: 0.52
   displayRowSpacing: 0.36
   displayMaxDepth: 1.3
@@ -934,7 +934,7 @@ MonoBehaviour:
   displayedTreasures: []
   handCardSpacing: 0.3
   handVisibleCardCount: 12
-  handStorageDistance: 4
+  handStorageDistance: 6.5
   displayColumnSpacing: 0.52
   displayRowSpacing: 0.36
   displayMaxDepth: 1.3
@@ -1938,7 +1938,7 @@ MonoBehaviour:
   displayedTreasures: []
   handCardSpacing: 0.3
   handVisibleCardCount: 12
-  handStorageDistance: 4
+  handStorageDistance: 6.5
   displayColumnSpacing: 0.52
   displayRowSpacing: 0.36
   displayMaxDepth: 1.3
