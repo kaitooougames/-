@@ -1,9 +1,20 @@
 ﻿using UnityEngine;
 
+public enum SpecialActionEffect
+{
+    None,
+    Truck,
+    LargeTruck,
+    Collector
+}
+
 public class CardInteraction : MonoBehaviour
 {
     private Vector3 originalPosition;
     private Quaternion originalRotation;
+    private Vector3 originalScale;
+    private const float HoverScale = 1.04f;
+    private const float SelectedThiefScale = 1.08f;
     private bool isMoving = false;
     private Vector3 targetPosition;
     private Quaternion targetRotation;
@@ -39,10 +50,21 @@ public class CardInteraction : MonoBehaviour
     public bool isPhantomThief = false;  // 怪盗カードかどうか
     public bool isExhibit = false;       // 展示カードかどうか
     public bool isCage = false;          // 檻カードかどうか
+    [Header("特殊行動カード")]
+    public SpecialActionEffect specialEffect = SpecialActionEffect.None;
+    public bool IsSpecialAction => specialEffect != SpecialActionEffect.None;
+    public int DisplayCount => specialEffect == SpecialActionEffect.LargeTruck ? 3 :
+        (specialEffect == SpecialActionEffect.Truck || specialEffect == SpecialActionEffect.Collector ? 2 : 1);
     public GameObject numberSelectionPanel; // 数字選択用のUIパネル
     private int selectedStealNumber = 0; // **選択した数字を保存**
     public StealNumberEffect effectPrefab; // **数字表示用のエフェクトプレハブ**
     private bool numberSelected = false;
+    private bool pointerDown;
+    private bool draggingHand;
+    private bool selectedHoverLocked;
+    private Vector3 pointerDownPosition;
+    private Vector3 lastPointerPosition;
+    private const float HandDragThreshold = 12f;
     public int SelectedNumber { get; set; } // 怪盗カードの選択した数字（1~6）
     private StealNumberEffect activeStealEffect; // 現在の怪盗宣言エフェクト
 
@@ -65,6 +87,7 @@ public class CardInteraction : MonoBehaviour
     {
         originalPosition = transform.position; // 初期位置を保持
         originalRotation = transform.rotation;
+        originalScale = transform.localScale;
         if (numberSelectionPanel) numberSelectionPanel.SetActive(false);
     }
 
@@ -76,6 +99,9 @@ public class CardInteraction : MonoBehaviour
 
     void Update()
     {
+        if (selectedHoverLocked)
+            transform.localScale = originalScale * SelectedThiefScale;
+
         if (isMoving)
         {
             transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * moveSpeed);
@@ -106,23 +132,63 @@ public class CardInteraction : MonoBehaviour
         {
             // カードを少し浮かせるだけ
             transform.position = originalPosition + new Vector3(0, 0.2f, 0);
+            transform.localScale = originalScale * HoverScale;
         }
     }
 
     void OnMouseExit()
     {
-        if (!isMoving && !hasMoved && isClickable)
-        {
-            transform.position = originalPosition;
-        }
+        if (!hasMoved) transform.position = originalPosition;
+        transform.localScale = selectedHoverLocked ? originalScale * SelectedThiefScale : originalScale;
     }
 
     void OnMouseDown()
     {
+        if (!isClickable || isMoving) return;
+        if (handManager != null && handManager.CardSelected) return;
+        pointerDown = true;
+        handManager?.BeginActionCardGrip();
+        draggingHand = false;
+        pointerDownPosition = Input.mousePosition;
+        lastPointerPosition = pointerDownPosition;
+    }
+
+    void OnMouseDrag()
+    {
+        if (!pointerDown || handManager == null) return;
+        Vector3 current = Input.mousePosition;
+        if (!draggingHand && Vector3.Distance(current, pointerDownPosition) >= HandDragThreshold)
+            draggingHand = true;
+        if (draggingHand)
+            handManager.ScrollActionHandByPixels(current.x - lastPointerPosition.x);
+        lastPointerPosition = current;
+    }
+
+    void OnMouseUp()
+    {
+        if (!pointerDown) return;
+        pointerDown = false;
+        handManager?.EndActionCardGrip();
+        if (draggingHand)
+        {
+            draggingHand = false;
+            return;
+        }
+        PerformClick();
+    }
+
+    private void PerformClick()
+    {
         if (!isClickable || isMoving) return; // クリック不可・移動中なら無視
+        if (handManager != null && handManager.CardSelected) return;
 
         Player player = FindObjectOfType<Player>();
         if (player == null || player.isEliminated) return;
+        if (!SpecialActionCardSystem.CanSelect(0, this))
+        {
+            Debug.Log("コレクターの効果により、今ターンは展示カードしか選べません。");
+            return;
+        }
 
         if (isPhantomThief)
         {
@@ -134,6 +200,8 @@ public class CardInteraction : MonoBehaviour
 
             if (isClickable)
             {
+                selectedHoverLocked = true;
+                LockSelectedThiefScale();
                 ShowNumberSelection();
                 DisableClick(false);
             }
@@ -146,6 +214,7 @@ public class CardInteraction : MonoBehaviour
 
             MoveToCenter(player.SelectedNumber);
             player.SelectCard(this, 0);
+            SpecialActionCardSystem.NotifySelected(0, this);
             DisableClick(false);
         }
 
@@ -160,6 +229,7 @@ public class CardInteraction : MonoBehaviour
 
     public void MoveTo(Vector3 newPosition, float speed = 5f) // デフォルト速度は5
     {
+        transform.localScale = selectedHoverLocked ? originalScale * SelectedThiefScale : originalScale;
         Debug.Log(gameObject.name + " is moving to " + newPosition);
         targetPosition = newPosition;
         targetRotation = originalRotation;
@@ -167,6 +237,16 @@ public class CardInteraction : MonoBehaviour
         moveSpeed = speed; // スピードを変更可能にする
                            // **新しい位置を originalPosition に更新**
         originalPosition = newPosition;
+    }
+
+    public void MoveToImmediate(Vector3 newPosition)
+    {
+        originalPosition = newPosition;
+        targetPosition = newPosition;
+        transform.position = newPosition;
+        transform.rotation = originalRotation;
+        transform.localScale = selectedHoverLocked ? originalScale * SelectedThiefScale : originalScale;
+        isMoving = false;
     }
 
 
@@ -188,6 +268,28 @@ public class CardInteraction : MonoBehaviour
     public void SetHandManager(HandManager manager)
     {
         handManager = manager;
+    }
+
+    public void InitializeHandPose(Vector3 position, Quaternion rotation)
+    {
+        transform.position = position;
+        transform.rotation = rotation;
+        originalPosition = position;
+        originalRotation = rotation;
+        if (originalScale == Vector3.zero) originalScale = transform.localScale;
+        transform.localScale = originalScale;
+        targetPosition = position;
+        targetRotation = rotation;
+        isMoving = false;
+        isFlipping = false;
+        hasMoved = false;
+    }
+
+    public void LockSelectedThiefScale()
+    {
+        if (!isPhantomThief) return;
+        selectedHoverLocked = true;
+        transform.localScale = originalScale * SelectedThiefScale;
     }
 
     public void DisableClick(bool dim = true)
@@ -353,6 +455,8 @@ public class CardInteraction : MonoBehaviour
             card.isClickable = true;  // クリックを再度有効化
             card.hasMoved = false;    // **移動フラグをリセット**
             card.numberSelected = false; // **数字選択フラグをリセット**
+            card.selectedHoverLocked = false;
+            card.transform.localScale = card.originalScale;
             card.transform.position = card.originalPosition; // **元の位置に戻す**
             card.transform.rotation = card.originalRotation; // **元の回転に戻す**
             Debug.Log(card.gameObject.name + " がクリックできるようになった！");

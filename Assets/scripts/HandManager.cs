@@ -7,10 +7,13 @@ public class HandManager : MonoBehaviour
 
     public List<CardInteraction> cards; // 手札のカードリスト
     private bool cardSelected = false;  // すでにカードを選んだか
+    private CardInteraction activeSelectedCard;
     private bool gameFinished;
     [Header("行動カード手札UI")]
     [SerializeField] private bool actionHandVisible = true;
     [SerializeField] private float handSlideSpeed = 8f;
+    [SerializeField, Range(0.5f, 10f)] private float actionHandInertiaFriction = 3f;
+    [SerializeField] private float actionHandMaxFlickSpeed = 2400f;
     [SerializeField] private Vector3 closedHandPosition = new Vector3(0f, 3f, -4f);
     [SerializeField, Range(2, 4)] private int actionPlayerCount = 4;
     [Header("画面UI調整")]
@@ -20,9 +23,15 @@ public class HandManager : MonoBehaviour
     [SerializeField] private Vector2 playerCountsOffset = new Vector2(0f, -40f);
     [SerializeField] private Vector2 dayLabelOffset = new Vector2(-240f, 16f);
     private int currentDay = 1;
+    private float actionScrollOffset;
+    private bool draggingActionHand;
+    private bool actionCardGripActive;
+    private float lastActionDragX;
+    private float actionHandVelocity;
 
     public bool ActionHandVisible => actionHandVisible;
     public int ActionPlayerCount => actionPlayerCount;
+    public bool CardSelected => cardSelected;
 
     public int ToTreasurePlayerId(int actionSeatId)
     {
@@ -45,11 +54,15 @@ public class HandManager : MonoBehaviour
     private void Awake()
     {
         Instance = this;
+        // ゲーム開始時と次ターンの選択待ちは、行動カードを開いておく。
+        actionHandVisible = true;
+        SpecialActionCardSystem.ResetSession();
     }
 
     void Start()
     {
         ApplyPlayerCount(actionPlayerCount);
+        SpecialActionCardSystem.DealInitialCards(this);
         SetInitialPositions(); // 初期位置を設定
         Invoke("ArrangeHand", 1.0f); // 1秒後に手札を並べる
         Invoke(nameof(RefreshPlayerOneCardAvailability), 1.05f);
@@ -133,8 +146,97 @@ public class HandManager : MonoBehaviour
 
     private Vector3 GetOpenCardPosition(int index, float[] basePositions)
     {
-        float xPos = basePositions[index % basePositions.Length];
+        float xPos = basePositions[0] + index * 0.64f + actionScrollOffset;
         return new Vector3(xPos, 2f, -2.5f);
+    }
+
+    public void RefreshActionHandLayout(bool immediate = false)
+    {
+        float minOffset = -Mathf.Max(0, cards.Count - 4) * 0.64f;
+        actionScrollOffset = Mathf.Clamp(actionScrollOffset, minOffset, 0f);
+        float[] basePositions = { -0.96f, -0.32f, 0.32f, 0.96f };
+        for (int i = 0; i < cards.Count; i++)
+        {
+            if (cards[i] == null) continue;
+            if (cardSelected && cards[i] == activeSelectedCard) continue;
+            cards[i].SetHandManager(this);
+            Vector3 target = actionHandVisible ? GetOpenCardPosition(i, basePositions) : closedHandPosition;
+            if (immediate) cards[i].MoveToImmediate(target);
+            else cards[i].MoveTo(target, handSlideSpeed);
+        }
+    }
+
+    public void ScrollActionHandByPixels(float pixelDelta)
+    {
+        if (!actionHandVisible || cardSelected || cards.Count <= 4) return;
+        ApplyActionHandScroll(pixelDelta);
+
+        // ドラッグ中は移動量を直接反映し、ここではリリース後に使う速度だけを計測する。
+        if ((actionCardGripActive || draggingActionHand) && Mathf.Abs(pixelDelta) > 0.01f)
+        {
+            float frameTime = Mathf.Max(0.005f, Time.unscaledDeltaTime);
+            float instantVelocity = pixelDelta / frameTime;
+            actionHandVelocity = Mathf.Clamp(
+                instantVelocity, -actionHandMaxFlickSpeed, actionHandMaxFlickSpeed);
+        }
+    }
+
+    private void ApplyActionHandScroll(float pixelDelta)
+    {
+        float worldDelta = pixelDelta * 0.006f;
+        if (Camera.main != null)
+        {
+            Vector3 reference = new Vector3(0f, 2f, -2.5f);
+            float pixelsPerCard = Mathf.Abs(
+                Camera.main.WorldToScreenPoint(reference + Vector3.right * 0.64f).x -
+                Camera.main.WorldToScreenPoint(reference).x);
+            worldDelta = pixelDelta / Mathf.Max(20f, pixelsPerCard) * 0.64f;
+        }
+        actionScrollOffset += worldDelta;
+        RefreshActionHandLayout(true);
+    }
+
+    public void BeginActionCardGrip()
+    {
+        actionCardGripActive = true;
+        draggingActionHand = false;
+        actionHandVelocity = 0f;
+    }
+
+    public void EndActionCardGrip() => actionCardGripActive = false;
+
+    private void Update()
+    {
+        // カード外でリリースしてイベントを取り逃しても、慣性を開始できるようにする。
+        if (!Input.GetMouseButton(0))
+        {
+            actionCardGripActive = false;
+            draggingActionHand = false;
+        }
+
+        // 宝カードと同様、掴んでいる最中は直接追従だけにする。
+        if (actionCardGripActive || draggingActionHand || !actionHandVisible ||
+            cardSelected || cards.Count <= 4)
+            return;
+        if (Mathf.Abs(actionHandVelocity) < 10f)
+        {
+            actionHandVelocity = 0f;
+            return;
+        }
+
+        float deltaTime = Time.unscaledDeltaTime;
+        ApplyActionHandScroll(actionHandVelocity * deltaTime);
+        actionHandVelocity *= Mathf.Exp(-actionHandInertiaFriction * deltaTime);
+    }
+
+    public void RemoveConfiscatedPlayerOneCard(CardInteraction card)
+    {
+        if (card == null) return;
+        cards.Remove(card);
+        // 現在の先頭位置を基準に、通常・特殊を区別せず残った順番で隙間を詰める。
+        float minOffset = -Mathf.Max(0, cards.Count - 4) * 0.64f;
+        actionScrollOffset = Mathf.Clamp(actionScrollOffset, minOffset, 0f);
+        RefreshActionHandLayout(true);
     }
 
     public void ToggleActionHand()
@@ -152,6 +254,7 @@ public class HandManager : MonoBehaviour
         {
             CardInteraction card = cards[i];
             if (card == null) continue;
+            if (cardSelected && card == activeSelectedCard) continue;
 
             Vector3 target = actionHandVisible
                 ? GetOpenCardPosition(i, basePositions)
@@ -170,7 +273,8 @@ public class HandManager : MonoBehaviour
         foreach (CardInteraction card in cards)
         {
             if (card == null) continue;
-            if (!actionHandVisible || gameFinished || (thiefBlocked && card.isPhantomThief))
+            bool collectorBlocked = SpecialActionCardSystem.IsExhibitOnly(0) && !card.isExhibit;
+            if (!actionHandVisible || gameFinished || (thiefBlocked && card.isPhantomThief) || collectorBlocked)
                 card.DisableClick();
             else
                 card.EnableClick();
@@ -203,10 +307,42 @@ public class HandManager : MonoBehaviour
             : "行\n動\nカ\nー\nド\nを\n見\nる\n▶";
         if (GUI.Button(buttonRect, label, style)) ToggleActionHand();
         GUI.enabled = true;
+        HandleActionHandScroll();
 
         DrawPlayerDisplayControls(style);
         DrawPlayerCounts();
         DrawDayCounter();
+    }
+
+    private void HandleActionHandScroll()
+    {
+        if (actionCardGripActive) return;
+        if (!actionHandVisible || cardSelected || cards.Count <= 4) return;
+        Event current = Event.current;
+        Rect area = new Rect(0f, Screen.height * 0.35f, Screen.width, Screen.height * 0.5f);
+        if (current.type == EventType.ScrollWheel && area.Contains(current.mousePosition))
+        {
+            actionScrollOffset -= current.delta.y * 0.12f;
+            RefreshActionHandLayout(true);
+            current.Use();
+        }
+        else if (current.type == EventType.MouseDown && current.button == 0 && area.Contains(current.mousePosition))
+        {
+            draggingActionHand = true;
+            actionHandVelocity = 0f;
+            lastActionDragX = current.mousePosition.x;
+        }
+        else if (current.type == EventType.MouseDrag && draggingActionHand)
+        {
+            float delta = current.mousePosition.x - lastActionDragX;
+            lastActionDragX = current.mousePosition.x;
+            ScrollActionHandByPixels(delta);
+            current.Use();
+        }
+        else if (current.type == EventType.MouseUp)
+        {
+            draggingActionHand = false;
+        }
     }
 
     private void DrawPlayerDisplayControls(GUIStyle buttonStyle)
@@ -309,6 +445,8 @@ public class HandManager : MonoBehaviour
             return; // すでにカードを選んでいたら無視
         }
         cardSelected = true;
+        activeSelectedCard = selectedCard;
+        selectedCard.LockSelectedThiefScale();
         Debug.Log("カード選択: " + selectedCard.name);
 
         // **怪盗カードでなければカメラを移動**
@@ -334,10 +472,13 @@ public class HandManager : MonoBehaviour
 
     public void MoveCardsAfterThiefPhase()
     {
+        SpecialActionCardSystem.ConsumeSelectedCards(this);
         currentDay++;
         actionHandVisible = true;
-        Start();
         cardSelected = false;
+        activeSelectedCard = null;
+        // Start()の再実行による瞬間移動は行わず、現在位置から手札へ戻す。
+        RefreshActionHandLayout();
         Debug.Log("2日目開始！");
     }
 

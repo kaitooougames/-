@@ -762,7 +762,7 @@ MonoBehaviour:
   startDelay: 1
   showStartButton: 1
   buttonMargin: 14
-  handInertiaFriction: 3.2
+  handInertiaFriction: 3
   handMaxFlickSpeed: 2400
 --- !u!4 &496891301
 Transform:

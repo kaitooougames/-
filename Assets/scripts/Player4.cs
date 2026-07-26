@@ -35,6 +35,7 @@ public class Player4 : MonoBehaviour
 
         // 🔥 怪盗が初犯の場合はランダム選択から除外
         List<CardInteraction> selectableCards = new List<CardInteraction>(player4Cards);
+        selectableCards.RemoveAll(card => !SpecialActionCardSystem.CanSelect(3, card));
 
         if (isFirstOffense)
         {
@@ -53,6 +54,7 @@ public class Player4 : MonoBehaviour
         // ランダムに選択
         int randomIndex = Random.Range(0, selectableCards.Count);
         selectedCard = selectableCards[randomIndex];
+        SpecialActionCardSystem.NotifySelected(3, selectedCard);
 
         Vector3 player4Position = new Vector3(1, 0, 0);
         selectedCard.MoveTo(player4Position, 2.5f);
@@ -156,14 +158,14 @@ public class Player4 : MonoBehaviour
         }
         else // すでに前科ありなら行動カードを没収
         {
-            if (player4Cards.Count > 0)
+            if (SpecialActionCardSystem.NormalCards(player4Cards).Count > 0)
             {
                 RemoveRandomPlayerCard(); // player2Cards からランダムにカードを削除
                 Debug.Log($"{name} は前科ありのため行動カードを1枚没収されました。残り {player4Cards.Count} 枚。");
             }
 
             // 🟡 残り1枚が檻カードなら脱落＋檻カード削除
-            if (player4Cards.Count == 1 && player4Cards[0].IsCageCard())
+            if (SpecialActionCardSystem.IsEliminatedByNormalCards(player4Cards))
             {
                 Debug.Log($"{name} は檻カード1枚のみになったため脱落しました！");
                 player4Cards.RemoveAt(0); // 檻カード削除
@@ -189,7 +191,9 @@ public class Player4 : MonoBehaviour
         }
 
         // ランダムに1枚削除
-        CardInteraction cardToRemove = player4Cards[Random.Range(0, player4Cards.Count)];
+        List<CardInteraction> normalCards = SpecialActionCardSystem.NormalCards(player4Cards);
+        if (normalCards.Count == 0) return;
+        CardInteraction cardToRemove = normalCards[Random.Range(0, normalCards.Count)];
         player4Cards.Remove(cardToRemove);
 
         Debug.Log($"{name} の {cardToRemove.name} が没収されました。");

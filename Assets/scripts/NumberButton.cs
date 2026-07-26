@@ -3,26 +3,34 @@ using UnityEngine;
 public class NumberButton : MonoBehaviour
 {
     public int number;  // 1〜6 の値（Inspector で設定）
-    private Vector3 originalPosition; // 初期位置を保存
+    private Vector3 originalLocalPosition; // パネル内の初期位置を保存
     private float hoverHeight = 0.1f; // ホバー時の上昇量
 
     private CardInteraction assignedPhantomThiefCard;  // **関連付けられた怪盗カード**
 
-    void Start()
+    void Awake()
     {
-        originalPosition = transform.position; // 初期位置を保存
+        originalLocalPosition = transform.localPosition;
+    }
+
+    void OnEnable()
+    {
+        transform.localPosition = originalLocalPosition;
     }
 
     void OnMouseEnter()
     {
-        // カーソルを合わせたら少し上に移動
-        transform.position = originalPosition + new Vector3(0, hoverHeight, 0);
+        // 元と同じワールドY方向へ0.1上げる。ただし座標保存はローカルなので飛ばない。
+        Vector3 localHoverOffset = transform.parent != null
+            ? transform.parent.InverseTransformVector(Vector3.up * hoverHeight)
+            : Vector3.up * hoverHeight;
+        transform.localPosition = originalLocalPosition + localHoverOffset;
     }
 
     void OnMouseExit()
     {
         // カーソルが外れたら元の位置に戻る
-        transform.position = originalPosition;
+        transform.localPosition = originalLocalPosition;
     }
 
     void OnMouseDown()

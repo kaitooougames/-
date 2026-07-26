@@ -7,13 +7,14 @@ namespace TreasureGame
 // 行動カード側が完成するまで、お宝ターン全体を試すための仮クラス。
 public class TreasureTurnPrototype : MonoBehaviour
 {
+    public static TreasureTurnPrototype Instance { get; private set; }
     [SerializeField] private TreasureController treasureController;
     [SerializeField] private bool playOnStart = true;
     [SerializeField] private float startDelay = 1f;
     [Header("試作ボタン")]
     [SerializeField] private bool showStartButton = true;
     [SerializeField] private float buttonMargin = 14f;
-    [SerializeField, Range(1f, 10f)] private float handInertiaFriction = 3.2f;
+    [SerializeField, Range(0.5f, 10f)] private float handInertiaFriction = 3f;
     [SerializeField] private float handMaxFlickSpeed = 2400f;
     [Header("画面UI調整")]
     [SerializeField, Range(1f, 3f)] private float uiScale = 2f;
@@ -24,10 +25,44 @@ public class TreasureTurnPrototype : MonoBehaviour
     private bool draggingHand;
     private float lastDragX;
     private float handSlideVelocity;
+    private bool cardGripActive;
+
+    private void Awake() => Instance = this;
+
+    public void BeginCardHandGrip()
+    {
+        cardGripActive = true;
+        draggingHand = false;
+        handSlideVelocity = 0f;
+    }
+
+    public void DragHandFromCard(float deltaX)
+    {
+        EnsureController();
+        if (treasureController == null) return;
+        treasureController.DragPlayerOneHand(deltaX);
+        // カード上では停止イベントが最後に届くことがあるため、
+        // 0移動で直前のフリック速度を消さない。
+        if (Mathf.Abs(deltaX) > 0.01f)
+        {
+            float frameTime = Mathf.Max(0.005f, Time.unscaledDeltaTime);
+            float instantVelocity = deltaX / frameTime;
+            handSlideVelocity = Mathf.Clamp(
+                instantVelocity, -handMaxFlickSpeed, handMaxFlickSpeed);
+        }
+    }
+
+    public void EndCardHandGrip() => cardGripActive = false;
 
     private void Update()
     {
-        if (draggingHand || Mathf.Abs(handSlideVelocity) < 10f) return;
+        // カードの外で離してOnMouseUpを取り逃した場合も確実に慣性へ移る。
+        if (cardGripActive && !Input.GetMouseButton(0))
+            cardGripActive = false;
+
+        // 掴んでいる間はカーソルへの直接追従だけを使い、
+        // 計測した速度は指を離した後の慣性にだけ使用する。
+        if (draggingHand || cardGripActive || Mathf.Abs(handSlideVelocity) < 10f) return;
         EnsureController();
         if (treasureController == null || !treasureController.PlayerOneHandVisible)
         {
@@ -36,6 +71,7 @@ public class TreasureTurnPrototype : MonoBehaviour
         }
 
         float deltaTime = Time.unscaledDeltaTime;
+        // ドラッグ中と同じ画面ピクセル換算を使い、離した瞬間に速度が落ちないようにする。
         treasureController.DragPlayerOneHand(handSlideVelocity * deltaTime);
         handSlideVelocity *= Mathf.Exp(-handInertiaFriction * deltaTime);
     }
@@ -99,9 +135,16 @@ public class TreasureTurnPrototype : MonoBehaviour
                 : null;
             bool displayViewLocked = cameraController != null &&
                 (cameraController.PlayerDisplayViewActive || cameraController.IsCameraMoving);
-            GUI.enabled = !displayViewLocked;
+            bool actionSelectionLocked = global::HandManager.Instance != null &&
+                global::HandManager.Instance.CardSelected;
+            GUI.enabled = !displayViewLocked && !actionSelectionLocked;
             if (GUI.Button(treasureButton, treasureLabel, treasureStyle))
+            {
+                bool openingTreasureHand = !treasureController.PlayerOneHandVisible;
+                if (global::HandManager.Instance != null)
+                    global::HandManager.Instance.SetActionHandVisible(!openingTreasureHand);
                 treasureController.TogglePlayerOneHand();
+            }
 
             if (treasureController.PlayerOneHandVisible) HandleHandScrollInput();
 
@@ -143,6 +186,7 @@ public class TreasureTurnPrototype : MonoBehaviour
 
     private void HandleHandScrollInput()
     {
+        if (cardGripActive) return;
         Event current = Event.current;
         Rect handArea = new Rect(40f, Screen.height * 0.43f, Screen.width - 55f, Screen.height * 0.42f);
         bool inside = handArea.Contains(current.mousePosition);

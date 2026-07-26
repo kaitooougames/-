@@ -112,27 +112,39 @@ public class CameraController : MonoBehaviour
 
     private void BeginTreasureDisplaysFromActionCards()
     {
+        // 展示選択中に行動カードが戻って見えないよう、基本は閉じた状態にする。
+        if (handManager != null) handManager.SetActionHandVisible(false);
         TreasureGame.TreasureController treasureController =
             FindFirstObjectByType<TreasureGame.TreasureController>();
         if (treasureController == null || treasureController.Phase != TreasureGame.TreasurePhase.Waiting)
             return;
 
         var displayPlayers = new List<int>();
-        if (Player != null && !Player.isEliminated && Player.SelectedCard != null && Player.SelectedCard.isExhibit)
-            displayPlayers.Add(ToTreasurePlayerId(0));
+        var displayCounts = new List<int>();
+        AddDisplayDeclaration(Player != null ? Player.SelectedCard : null,
+            Player != null && Player.isEliminated, ToTreasurePlayerId(0), displayPlayers, displayCounts);
         if (Player2 != null && Player2.gameObject.activeInHierarchy && !Player2.isEliminated &&
             Player2.SelectedCard != null && Player2.SelectedCard.isExhibit)
+        {
             displayPlayers.Add(ToTreasurePlayerId(1));
+            displayCounts.Add(Player2.SelectedCard.DisplayCount);
+        }
         if (Player3 != null && Player3.gameObject.activeInHierarchy && !Player3.isEliminated &&
             Player3.SelectedCard != null && Player3.SelectedCard.isExhibit)
+        {
             displayPlayers.Add(ToTreasurePlayerId(2));
+            displayCounts.Add(Player3.SelectedCard.DisplayCount);
+        }
         if (Player4 != null && Player4.gameObject.activeInHierarchy && !Player4.isEliminated &&
             Player4.SelectedCard != null && Player4.SelectedCard.isExhibit)
+        {
             displayPlayers.Add(ToTreasurePlayerId(3));
+            displayCounts.Add(Player4.SelectedCard.DisplayCount);
+        }
 
         if (displayPlayers.Count == 0) return;
 
-        treasureController.BeginDisplayPhase(displayPlayers.ToArray());
+        treasureController.BeginDisplayPhase(displayPlayers.ToArray(), displayCounts.ToArray());
         TreasureGame.Treasure[] treasures =
             FindObjectsByType<TreasureGame.Treasure>(FindObjectsSortMode.None);
 
@@ -140,14 +152,25 @@ public class CameraController : MonoBehaviour
         foreach (int playerId in displayPlayers)
         {
             if (playerId == ToTreasurePlayerId(0)) continue;
+            int declarationIndex = displayPlayers.IndexOf(playerId);
+            int remaining = declarationIndex >= 0 ? displayCounts[declarationIndex] : 1;
             foreach (TreasureGame.Treasure treasure in treasures)
             {
                 if (treasure.Owner == null || treasure.Owner.PlayerId != playerId ||
                     !treasureController.CanInteract(treasure)) continue;
                 treasureController.HandleTreasureClick(treasure);
-                break;
+                remaining--;
+                if (remaining <= 0) break;
             }
         }
+    }
+
+    private static void AddDisplayDeclaration(CardInteraction card, bool eliminated, int playerId,
+        List<int> playerIds, List<int> counts)
+    {
+        if (eliminated || card == null || !card.isExhibit) return;
+        playerIds.Add(playerId);
+        counts.Add(card.DisplayCount);
     }
 
     private IEnumerator WaitForTreasureDisplays()
@@ -268,6 +291,7 @@ public class CameraController : MonoBehaviour
 
         Debug.Log($"<color=#FF9F70>【行動カード→怪盗】逮捕されていない怪盗 {robberPlayers.Count}人</color>");
         int[] rewardPlayers = DetermineSuccessfulCageRewardPlayers();
+        SpecialActionCardSystem.GrantCageRewards(rewardPlayers, handManager);
         treasureController.QueueArrestRewardDisplays(rewardPlayers);
         Debug.Log($"<color=#FFD966>【檻報酬連携】展示報酬 {rewardPlayers.Length}人</color>");
         treasureController.BeginRobberyPhase(robberPlayers.ToArray(), robberyCounts.ToArray());

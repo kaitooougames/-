@@ -1087,6 +1087,8 @@ MonoBehaviour:
   - {fileID: 0}
   actionHandVisible: 1
   handSlideSpeed: 8
+  actionHandInertiaFriction: 3
+  actionHandMaxFlickSpeed: 2400
   closedHandPosition: {x: 0, y: 3, z: -4}
   actionPlayerCount: 4
   uiScale: 2
@@ -1236,6 +1238,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 1
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &285857617
@@ -1495,6 +1498,8 @@ MonoBehaviour:
   cards: []
   actionHandVisible: 1
   handSlideSpeed: 8
+  actionHandInertiaFriction: 3
+  actionHandMaxFlickSpeed: 2400
   closedHandPosition: {x: 0, y: 3, z: -4}
   actionPlayerCount: 4
   uiScale: 2
@@ -1856,6 +1861,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 1
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &391652749
@@ -2212,6 +2218,8 @@ MonoBehaviour:
   - {fileID: 1393165190}
   actionHandVisible: 1
   handSlideSpeed: 8
+  actionHandInertiaFriction: 5.5
+  actionHandMaxFlickSpeed: 2400
   closedHandPosition: {x: 0, y: 3, z: -4}
   actionPlayerCount: 4
   uiScale: 2
@@ -2285,6 +2293,7 @@ MonoBehaviour:
   isPhantomThief: 1
   isExhibit: 0
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 1339474442}
   effectPrefab: {fileID: 1254169612}
 --- !u!64 &492441910
@@ -2409,7 +2418,7 @@ MonoBehaviour:
   startDelay: 1
   showStartButton: 1
   buttonMargin: 14
-  handInertiaFriction: 3.2
+  handInertiaFriction: 5.5
   handMaxFlickSpeed: 2400
   uiScale: 2
   instructionOffset: {x: 0, y: 14}
@@ -2712,6 +2721,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 0
   isCage: 1
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &544522847
@@ -2911,6 +2921,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 1
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &555754231
@@ -3538,6 +3549,7 @@ MonoBehaviour:
   isPhantomThief: 1
   isExhibit: 0
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 1339474442}
   effectPrefab: {fileID: 1254169612}
 --- !u!64 &625973959
@@ -3844,6 +3856,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 0
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!4 &758092153
@@ -3911,6 +3924,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 1
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &777602106
@@ -4040,6 +4054,7 @@ MonoBehaviour:
   isPhantomThief: 1
   isExhibit: 0
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 1339474442}
   effectPrefab: {fileID: 1254169612}
 --- !u!64 &820683756
@@ -4507,6 +4522,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 0
   isCage: 1
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &1012343917
@@ -5276,6 +5292,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 1
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &1287908920
@@ -5501,9 +5518,9 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1339474442}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.5, y: 0, z: 0, w: 0.8660254}
-  m_LocalPosition: {x: 0.34, y: 2.1, z: -2.5}
-  m_LocalScale: {x: 0.06, y: 0.1, z: 0.05}
+  m_LocalRotation: {x: 0, y: -0.7071067, z: 0.7071068, w: 0}
+  m_LocalPosition: {x: -0.31250012, y: 0.08660245, z: -0.5681814}
+  m_LocalScale: {x: 0.9374999, y: 1.1363637, z: 0.050000004}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 602612660}
@@ -5512,7 +5529,7 @@ Transform:
   - {fileID: 1552715063}
   - {fileID: 267217081}
   - {fileID: 65811286}
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1984382524}
   m_LocalEulerAnglesHint: {x: 60, y: 0, z: 0}
 --- !u!1 &1393165188
 GameObject:
@@ -5565,6 +5582,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 0
   isCage: 1
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &1393165191
@@ -5731,6 +5749,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 1
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &1404827353
@@ -6459,6 +6478,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 1
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &1774447140
@@ -6587,6 +6607,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 1
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &1901735605
@@ -6729,7 +6750,8 @@ Transform:
   m_LocalPosition: {x: 0.32, y: 2, z: -2.5}
   m_LocalScale: {x: 0.064, y: 1, z: 0.088}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1339474443}
   m_Father: {fileID: 1476980210}
   m_LocalEulerAnglesHint: {x: 30, y: 180, z: 0}
 --- !u!114 &1984382525
@@ -6747,6 +6769,7 @@ MonoBehaviour:
   isPhantomThief: 1
   isExhibit: 0
   isCage: 0
+  specialEffect: 0
   numberSelectionPanel: {fileID: 1339474442}
   effectPrefab: {fileID: 1254169612}
 --- !u!64 &1984382526
@@ -7117,6 +7140,7 @@ MonoBehaviour:
   isPhantomThief: 0
   isExhibit: 0
   isCage: 1
+  specialEffect: 0
   numberSelectionPanel: {fileID: 0}
   effectPrefab: {fileID: 0}
 --- !u!64 &2113631162
@@ -8022,7 +8046,6 @@ SceneRoots:
   - {fileID: 331576791}
   - {fileID: 832575519}
   - {fileID: 456589255}
-  - {fileID: 1339474443}
   - {fileID: 1476980210}
   - {fileID: 451409860}
   - {fileID: 573353517}

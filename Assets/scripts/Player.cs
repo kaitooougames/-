@@ -122,13 +122,13 @@ public class Player : MonoBehaviour
         }
         else
         {
-            if (playerCards.Count > 0)
+            if (SpecialActionCardSystem.NormalCards(playerCards).Count > 0)
             {
                 RemoveRandomPlayerCard();
                 Debug.Log($"{name} は前科ありのため行動カードを1枚没収されました。残り {playerCards.Count} 枚。");
             }
 
-            if (playerCards.Count == 0 || (playerCards.Count == 1 && playerCards[0].IsCageCard()))
+            if (SpecialActionCardSystem.IsEliminatedByNormalCards(playerCards))
             {
                 Debug.Log($"{name} は脱落しました！");
                 isEliminated = true;
@@ -140,9 +140,11 @@ public class Player : MonoBehaviour
     {
         if (playerCards == null || playerCards.Count == 0) return;
 
-        int index = Random.Range(0, playerCards.Count);
-        CardInteraction cardToRemove = playerCards[index];
-        playerCards.RemoveAt(index);
+        List<CardInteraction> normalCards = SpecialActionCardSystem.NormalCards(playerCards);
+        if (normalCards.Count == 0) return;
+        CardInteraction cardToRemove = normalCards[Random.Range(0, normalCards.Count)];
+        playerCards.Remove(cardToRemove);
+        HandManager.Instance?.RemoveConfiscatedPlayerOneCard(cardToRemove);
 
         // 🔸 GameObject を破壊せず非表示にする
         cardToRemove.gameObject.SetActive(false);

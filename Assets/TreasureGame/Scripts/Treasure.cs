@@ -200,18 +200,47 @@ public class Treasure : MonoBehaviour
         return baseRotation;
     }
 
+    private bool draggingHand;
+    private bool handPointerDown;
+    private Vector3 pressPosition;
+    private Vector3 lastDragPosition;
+    private bool CanDragPlayerOneHand =>
+        controller != null && owner != null && owner.PlayerId == 0 && location == TreasureLocation.Hand;
+
     private void OnMouseDown()
     {
-        if (interactable) StartCoroutine(ConfirmClickOnRelease());
+        if (!interactable && !CanDragPlayerOneHand) return;
+        handPointerDown = true;
+        TreasureTurnPrototype.Instance?.BeginCardHandGrip();
+        draggingHand = false;
+        pressPosition = Input.mousePosition;
+        lastDragPosition = pressPosition;
     }
 
-    private IEnumerator ConfirmClickOnRelease()
+    private void OnMouseDrag()
     {
-        Vector3 pressPosition = Input.mousePosition;
-        while (Input.GetMouseButton(0)) yield return null;
-        if (!interactable) yield break;
-        float dragDistance = Vector3.Distance(pressPosition, Input.mousePosition);
-        if (dragDistance < 8f) controller?.HandleTreasureClick(this);
+        if (!handPointerDown || !CanDragPlayerOneHand) return;
+        Vector3 current = Input.mousePosition;
+        if (!draggingHand && Vector3.Distance(pressPosition, current) >= 10f)
+            draggingHand = true;
+        if (draggingHand)
+        {
+            float deltaX = current.x - lastDragPosition.x;
+            if (TreasureTurnPrototype.Instance != null)
+                TreasureTurnPrototype.Instance.DragHandFromCard(deltaX);
+            else
+                controller.DragPlayerOneHand(deltaX);
+        }
+        lastDragPosition = current;
+    }
+
+    private void OnMouseUp()
+    {
+        if (!handPointerDown) return;
+        handPointerDown = false;
+        TreasureTurnPrototype.Instance?.EndCardHandGrip();
+        if (!draggingHand && interactable) controller?.HandleTreasureClick(this);
+        draggingHand = false;
     }
 
     private void OnMouseEnter()

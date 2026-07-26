@@ -109,6 +109,20 @@ public class Player : MonoBehaviour
         }
     }
 
+    public void DragHandScreenPixels(float screenPixels, Camera camera)
+    {
+        if (camera == null)
+        {
+            DragHand(screenPixels / 100f);
+            return;
+        }
+        Vector3 axis = handAnchor.rotation * Vector3.right * handCardSpacing;
+        float pixelsPerCard = Mathf.Abs(
+            camera.WorldToScreenPoint(handAnchor.position + axis).x -
+            camera.WorldToScreenPoint(handAnchor.position).x);
+        DragHand(screenPixels / Mathf.Max(20f, pixelsPerCard));
+    }
+
     public void AnimateHandLayout(float duration)
     {
         foreach (Treasure card in stock)

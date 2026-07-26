@@ -180,6 +180,13 @@ public class TreasureController : MonoBehaviour
     public void DragPlayerOneHand(float screenPixels)
     {
         if (players.Count == 0 || !players[0].HandVisible) return;
+        players[0].DragHandScreenPixels(screenPixels, Camera.main);
+    }
+
+    // 過去Git版と同じ慣性距離。直接ドラッグとは分けて余韻だけに使用する。
+    public void DragPlayerOneHandLegacyInertia(float screenPixels)
+    {
+        if (players.Count == 0 || !players[0].HandVisible) return;
         players[0].DragHand(screenPixels / 75f);
     }
 
