@@ -111,7 +111,8 @@ public static class SpecialActionCardSystem
 
         for (int i = 0; i < count; i++)
         {
-            SpecialActionEffect effect = (SpecialActionEffect)Random.Range(1, 4);
+            SpecialActionEffect effect = (SpecialActionEffect)Random.Range(
+                1, (int)SpecialActionEffect.FoolishGuard + 1);
             CardInteraction card = CreateCard(template, effect, seat);
             ownerCards.Add(card);
             if (seat == 0)
@@ -134,7 +135,11 @@ public static class SpecialActionCardSystem
         card.InitializeHandPose(handPositions[seat], handRotations[seat]);
 
         string imageName = effect == SpecialActionEffect.Truck ? "トラック" :
-            effect == SpecialActionEffect.LargeTruck ? "大型トラック" : "コレクター";
+            effect == SpecialActionEffect.LargeTruck ? "大型トラック" :
+            effect == SpecialActionEffect.Collector ? "コレクター" :
+            effect == SpecialActionEffect.Guard ? "警備員" :
+            effect == SpecialActionEffect.EerieGuard ? "怪奇な警備員" :
+            effect == SpecialActionEffect.FakeCop ? "偽警官" : "マヌケな警備員";
         clone.name = $"特殊_{imageName}";
         Texture2D texture = Resources.Load<Texture2D>($"SpecialActionCards/{imageName}");
         Renderer renderer = clone.GetComponentInChildren<Renderer>();

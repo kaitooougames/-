@@ -70,8 +70,9 @@ public class SecurityDice : MonoBehaviour
 
     public void RollDice(List<Player> players)
     {
+        bool fakeCopPlayed = HasSelectedEffect(SpecialActionEffect.FakeCop);
         // 逮捕されていない怪盗がいるかどうかを確認
-        if (!HasUnarrestedPhantomThief(players))
+        if (!HasUnarrestedPhantomThief(players) && !fakeCopPlayed)
         {
             Debug.Log("すべての怪盗が逮捕されました。警備サイコロを振りません。");
             return; // 逮捕されていない怪盗がいなければサイコロを振らない
@@ -81,6 +82,10 @@ public class SecurityDice : MonoBehaviour
         // エフェクト開始！
         diceEffectController.StartDiceRoll(rolledNumber);
         Debug.Log($"警備サイコロの目: {rolledNumber}");
+
+        // 偽警官が出ていれば怪盗がいなくても振り、1で使用者自身が逮捕される。
+        if (fakeCopPlayed && rolledNumber == 1)
+            ArrestFakeCopPlayers();
 
         // プレイヤーごとに処理を行う
         foreach (var player in players)
@@ -152,5 +157,34 @@ public class SecurityDice : MonoBehaviour
                 }
             }
         }
+    }
+
+    private bool HasSelectedEffect(SpecialActionEffect effect)
+    {
+        return (player != null && !player.isEliminated && player.SelectedCard != null &&
+                player.SelectedCard.specialEffect == effect) ||
+               (IsParticipating(player2) && !player2.isEliminated && player2.SelectedCard != null &&
+                player2.SelectedCard.specialEffect == effect) ||
+               (IsParticipating(player3) && !player3.isEliminated && player3.SelectedCard != null &&
+                player3.SelectedCard.specialEffect == effect) ||
+               (IsParticipating(player4) && !player4.isEliminated && player4.SelectedCard != null &&
+                player4.SelectedCard.specialEffect == effect);
+    }
+
+    private void ArrestFakeCopPlayers()
+    {
+        Debug.Log("【偽警官】警備サイコロが1のため、偽警官の使用者を逮捕！");
+        if (player != null && !player.isEliminated && !player.HasBeenArrested &&
+            player.SelectedCard != null && player.SelectedCard.specialEffect == SpecialActionEffect.FakeCop)
+            player.ShowArrestEffect();
+        if (IsParticipating(player2) && !player2.isEliminated && !player2.HasBeenArrested &&
+            player2.SelectedCard != null && player2.SelectedCard.specialEffect == SpecialActionEffect.FakeCop)
+            player2.ShowArrestEffect();
+        if (IsParticipating(player3) && !player3.isEliminated && !player3.HasBeenArrested &&
+            player3.SelectedCard != null && player3.SelectedCard.specialEffect == SpecialActionEffect.FakeCop)
+            player3.ShowArrestEffect();
+        if (IsParticipating(player4) && !player4.isEliminated && !player4.HasBeenArrested &&
+            player4.SelectedCard != null && player4.SelectedCard.specialEffect == SpecialActionEffect.FakeCop)
+            player4.ShowArrestEffect();
     }
 }

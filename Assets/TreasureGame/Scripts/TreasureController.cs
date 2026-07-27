@@ -23,6 +23,7 @@ public class TreasureController : MonoBehaviour
     private readonly Dictionary<int, GameObject> templates = new Dictionary<int, GameObject>();
     private readonly Dictionary<Player, List<Treasure>> displaySelections = new Dictionary<Player, List<Treasure>>();
     private readonly Dictionary<Player, int> requiredDisplayCounts = new Dictionary<Player, int>();
+    private readonly Dictionary<Player, TreasureType> displayTypeRestrictions = new Dictionary<Player, TreasureType>();
     private readonly List<Player> displayPlayers = new List<Player>();
     private readonly List<RobberyDeclaration> robberies = new List<RobberyDeclaration>();
     private readonly List<Treasure> stolenThisRobbery = new List<Treasure>();
@@ -56,6 +57,15 @@ public class TreasureController : MonoBehaviour
     public int GetHandCount(int playerId)
     {
         return ValidPlayer(playerId) ? players[playerId].Stock.Count : 0;
+    }
+
+    public int GetHandTypeCount(int playerId, TreasureType type)
+    {
+        if (!ValidPlayer(playerId)) return 0;
+        int count = 0;
+        foreach (Treasure treasure in players[playerId].Stock)
+            if (treasure != null && treasure.Type == type) count++;
+        return count;
     }
 
     public void SetPlayerEliminated(int playerId, bool eliminated = true)
@@ -246,7 +256,8 @@ public class TreasureController : MonoBehaviour
     // 行動カード処理からターン開始時に呼ぶ。
     public void BeginTurn()
     {
-        displaySelections.Clear(); requiredDisplayCounts.Clear(); displayPlayers.Clear(); robberies.Clear(); stolenThisRobbery.Clear();
+        displaySelections.Clear(); requiredDisplayCounts.Clear(); displayTypeRestrictions.Clear();
+        displayPlayers.Clear(); robberies.Clear(); stolenThisRobbery.Clear();
         stolenByRobber.Clear(); robberDisplaySelections.Clear();
         blockedFromWinningThisTurn.Clear();
         queuedArrestRewardPlayerIds.Clear();
@@ -268,7 +279,13 @@ public class TreasureController : MonoBehaviour
     // 2枚展示・3枚展示など、プレイヤーごとに選ぶ枚数を指定する。
     public void BeginDisplayPhase(int[] playerIds, int[] displayCounts)
     {
-        displaySelections.Clear(); requiredDisplayCounts.Clear(); displayPlayers.Clear();
+        BeginDisplayPhase(playerIds, displayCounts, null);
+    }
+
+    // typeRestrictionsは-1で制限なし、それ以外はTreasureTypeの値。
+    public void BeginDisplayPhase(int[] playerIds, int[] displayCounts, int[] typeRestrictions)
+    {
+        displaySelections.Clear(); requiredDisplayCounts.Clear(); displayTypeRestrictions.Clear(); displayPlayers.Clear();
         if (playerIds == null) { Phase = TreasurePhase.Waiting; RefreshInteraction(); return; }
         int inputCount = Mathf.Min(playerIds.Length, displayCounts != null ? displayCounts.Length : 0);
         for (int i = 0; i < inputCount; i++)
@@ -286,6 +303,9 @@ public class TreasureController : MonoBehaviour
             displayPlayers.Add(player);
             requiredDisplayCounts[player] = required;
             displaySelections[player] = new List<Treasure>();
+            if (typeRestrictions != null && i < typeRestrictions.Length &&
+                System.Enum.IsDefined(typeof(TreasureType), typeRestrictions[i]))
+                displayTypeRestrictions[player] = (TreasureType)typeRestrictions[i];
         }
         if (displayPlayers.Count == 0)
         {
@@ -308,7 +328,7 @@ public class TreasureController : MonoBehaviour
     public void DisplayAllTreasures(int[] playerIds)
     {
         if (playerIds == null || Phase != TreasurePhase.Waiting) return;
-        displaySelections.Clear(); requiredDisplayCounts.Clear(); displayPlayers.Clear();
+        displaySelections.Clear(); requiredDisplayCounts.Clear(); displayTypeRestrictions.Clear(); displayPlayers.Clear();
         foreach (int playerId in playerIds)
         {
             if (!ValidPlayer(playerId)) continue;
@@ -392,6 +412,8 @@ public class TreasureController : MonoBehaviour
             return card.Location == TreasureLocation.Hand && displayPlayers.Contains(card.Owner)
                 && (card.Owner.PlayerId != 0 || card.Owner.HandVisible)
                 && displaySelections.TryGetValue(card.Owner, out List<Treasure> selected)
+                && (!displayTypeRestrictions.TryGetValue(card.Owner, out TreasureType requiredType) ||
+                    card.Type == requiredType)
                 && selected.Count < requiredDisplayCounts[card.Owner] && !selected.Contains(card);
         if (Phase == TreasurePhase.Robbing)
             return card.Location == TreasureLocation.Display && card.Owner != ActiveRobber && stealsRemaining > 0;

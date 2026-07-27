@@ -5,7 +5,11 @@ public enum SpecialActionEffect
     None,
     Truck,
     LargeTruck,
-    Collector
+    Collector,
+    Guard,
+    EerieGuard,
+    FakeCop,
+    FoolishGuard
 }
 
 public class CardInteraction : MonoBehaviour

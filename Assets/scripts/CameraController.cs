@@ -121,30 +121,36 @@ public class CameraController : MonoBehaviour
 
         var displayPlayers = new List<int>();
         var displayCounts = new List<int>();
+        var displayTypeRestrictions = new List<int>();
         AddDisplayDeclaration(Player != null ? Player.SelectedCard : null,
-            Player != null && Player.isEliminated, ToTreasurePlayerId(0), displayPlayers, displayCounts);
+            Player != null && Player.isEliminated, ToTreasurePlayerId(0), treasureController,
+            displayPlayers, displayCounts, displayTypeRestrictions);
         if (Player2 != null && Player2.gameObject.activeInHierarchy && !Player2.isEliminated &&
             Player2.SelectedCard != null && Player2.SelectedCard.isExhibit)
         {
             displayPlayers.Add(ToTreasurePlayerId(1));
-            displayCounts.Add(Player2.SelectedCard.DisplayCount);
+            AddDisplayCountAndRestriction(Player2.SelectedCard, ToTreasurePlayerId(1), treasureController,
+                displayCounts, displayTypeRestrictions);
         }
         if (Player3 != null && Player3.gameObject.activeInHierarchy && !Player3.isEliminated &&
             Player3.SelectedCard != null && Player3.SelectedCard.isExhibit)
         {
             displayPlayers.Add(ToTreasurePlayerId(2));
-            displayCounts.Add(Player3.SelectedCard.DisplayCount);
+            AddDisplayCountAndRestriction(Player3.SelectedCard, ToTreasurePlayerId(2), treasureController,
+                displayCounts, displayTypeRestrictions);
         }
         if (Player4 != null && Player4.gameObject.activeInHierarchy && !Player4.isEliminated &&
             Player4.SelectedCard != null && Player4.SelectedCard.isExhibit)
         {
             displayPlayers.Add(ToTreasurePlayerId(3));
-            displayCounts.Add(Player4.SelectedCard.DisplayCount);
+            AddDisplayCountAndRestriction(Player4.SelectedCard, ToTreasurePlayerId(3), treasureController,
+                displayCounts, displayTypeRestrictions);
         }
 
         if (displayPlayers.Count == 0) return;
 
-        treasureController.BeginDisplayPhase(displayPlayers.ToArray(), displayCounts.ToArray());
+        treasureController.BeginDisplayPhase(displayPlayers.ToArray(), displayCounts.ToArray(),
+            displayTypeRestrictions.ToArray());
         TreasureGame.Treasure[] treasures =
             FindObjectsByType<TreasureGame.Treasure>(FindObjectsSortMode.None);
 
@@ -166,11 +172,30 @@ public class CameraController : MonoBehaviour
     }
 
     private static void AddDisplayDeclaration(CardInteraction card, bool eliminated, int playerId,
-        List<int> playerIds, List<int> counts)
+        TreasureGame.TreasureController treasureController,
+        List<int> playerIds, List<int> counts, List<int> typeRestrictions)
     {
         if (eliminated || card == null || !card.isExhibit) return;
         playerIds.Add(playerId);
+        AddDisplayCountAndRestriction(card, playerId, treasureController, counts, typeRestrictions);
+    }
+
+    private static void AddDisplayCountAndRestriction(CardInteraction card, int playerId,
+        TreasureGame.TreasureController treasureController,
+        List<int> counts, List<int> typeRestrictions)
+    {
+        if (card.specialEffect == SpecialActionEffect.EerieGuard)
+        {
+            int relics = treasureController.GetHandTypeCount(playerId, TreasureGame.TreasureType.Relic);
+            if (relics > 0)
+            {
+                counts.Add(Mathf.Min(2, relics));
+                typeRestrictions.Add((int)TreasureGame.TreasureType.Relic);
+                return;
+            }
+        }
         counts.Add(card.DisplayCount);
+        typeRestrictions.Add(-1);
     }
 
     private IEnumerator WaitForTreasureDisplays()
@@ -352,6 +377,16 @@ public class CameraController : MonoBehaviour
 
     private int[] DetermineSuccessfulCageRewardPlayers()
     {
+        if (arrestHandler != null)
+        {
+            int[] successfulSeats = arrestHandler.GetSuccessfulCagePlayerIds();
+            int[] successfulPlayers = new int[successfulSeats.Length];
+            for (int i = 0; i < successfulSeats.Length; i++)
+                successfulPlayers[i] = ToTreasurePlayerId(successfulSeats[i]);
+            Debug.Log($"【檻報酬判定】実際に檻で逮捕したプレイヤー：{successfulPlayers.Length}人");
+            return successfulPlayers;
+        }
+
         var cagePlayers = new List<int>();
         int thiefCount = 0;
         CountActionForCageReward(ToTreasurePlayerId(0), Player != null ? Player.SelectedCard : null,

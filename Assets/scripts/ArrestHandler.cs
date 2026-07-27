@@ -105,6 +105,7 @@ public class ArrestHandler : MonoBehaviour
 
         // **怪盗の競合処理**
         HandleThiefConflict(); // 🔹 檻がいなくても競合チェックを実行
+        HandleSpecialGuardEffects();
 
         // **檻が0なら怪盗の競合のみ行い、以降の処理はスキップ**
         if (cages.Count == 0) return; 
@@ -164,7 +165,8 @@ public class ArrestHandler : MonoBehaviour
 
     private void ArrestThieves()
     {
-        // **逮捕処理（1対1で対応）**
+        // 警備員ですでに逮捕済みでも、檻の対応対象なら檻は成功・報酬あり。
+        // 逮捕ペナルティそのものはArrest内で二重発動を防ぐ。
         phantomThieves = phantomThieves.OrderBy(t => t.SelectedNumber).ToList();
 
         for (int i = 0; i < cages.Count && i < phantomThieves.Count; i++)
@@ -174,6 +176,34 @@ public class ArrestHandler : MonoBehaviour
             int cagePlayerId = FindPlayerIdByCard(cages[i]);
             if (cagePlayerId >= 0 && !successfulCagePlayerIds.Contains(cagePlayerId))
                 successfulCagePlayerIds.Add(cagePlayerId);
+        }
+    }
+
+    private void HandleSpecialGuardEffects()
+    {
+        bool guardPlayed = fieldCards.Any(c => c.specialEffect == SpecialActionEffect.Guard);
+        bool eerieGuardPlayed = fieldCards.Any(c => c.specialEffect == SpecialActionEffect.EerieGuard);
+        bool fakeCopPlayed = fieldCards.Any(c => c.specialEffect == SpecialActionEffect.FakeCop);
+        bool foolishGuardPlayed = fieldCards.Any(c => c.specialEffect == SpecialActionEffect.FoolishGuard);
+
+        foreach (CardInteraction thief in phantomThieves)
+        {
+            int number = thief.SelectedNumber;
+            bool caught = (guardPlayed && number >= 3 && number <= 6) ||
+                          (eerieGuardPlayed && number % 2 == 1) ||
+                          (fakeCopPlayed && (number == 2 || number == 5 || number == 6));
+            if (!caught) continue;
+            Debug.Log($"【特殊警備員の即時逮捕】{thief.name}（宣言数{number}）");
+            Arrest(thief);
+        }
+
+        if (!foolishGuardPlayed) return;
+        foreach (CardInteraction card in fieldCards)
+        {
+            // 特殊展示ではなく、通常の展示カードを出したプレイヤーだけが対象。
+            if (!card.isExhibit || card.IsSpecialAction) continue;
+            Debug.Log($"【マヌケな警備員】通常展示カード使用者 {card.name} を逮捕");
+            Arrest(card);
         }
     }
 
@@ -189,37 +219,43 @@ public class ArrestHandler : MonoBehaviour
             : -1;
     }
 
-    private void Arrest(CardInteraction card)
+    private bool Arrest(CardInteraction card)
     {
         Debug.Log($"{card.name} が逮捕されました！");
+        bool arrested = false;
 
         // Player を検索
         Player player = FindPlayerByCard(card);
-        if (player != null)
+        if (player != null && !player.HasBeenArrested)
         {
             player.ShowArrestEffect();
+            arrested = true;
         }
 
         // Player2 を検索
         Player2 player2 = FindPlayer2ByCard(card);
-        if (player2 != null)
+        if (player2 != null && !player2.HasBeenArrested)
         {
             player2.ShowArrestEffect();
+            arrested = true;
         }
 
         // Player3 を検索
         Player3 player3 = FindPlayer3ByCard(card);
-        if (player3 != null)
+        if (player3 != null && !player3.HasBeenArrested)
         {
             player3.ShowArrestEffect();
+            arrested = true;
         }
 
         // Player4 を検索
         Player4 player4 = FindPlayer4ByCard(card);
-        if (player4 != null)
+        if (player4 != null && !player4.HasBeenArrested)
         {
             player4.ShowArrestEffect();
+            arrested = true;
         }
+        return arrested;
     }
 
     // Player の検索
