@@ -299,27 +299,29 @@ public class CameraController : MonoBehaviour
 
         var robberPlayers = new List<int>();
         var robberyCounts = new List<int>();
+        var robberyEffects = new List<int>();
 
         AddRobberyDeclaration(Player, ToTreasurePlayerId(0), Player != null ? Player.SelectedCard : null,
             Player != null ? Player.SelectedNumber : 0,
             Player != null && Player.HasBeenArrested, Player != null && Player.isEliminated,
-            robberPlayers, robberyCounts);
+            robberPlayers, robberyCounts, robberyEffects);
         if (Player2 != null && Player2.gameObject.activeInHierarchy)
             AddRobberyDeclaration(Player2, ToTreasurePlayerId(1), Player2.SelectedCard, Player2.SelectedNumber,
-                Player2.HasBeenArrested, Player2.isEliminated, robberPlayers, robberyCounts);
+                Player2.HasBeenArrested, Player2.isEliminated, robberPlayers, robberyCounts, robberyEffects);
         if (Player3 != null && Player3.gameObject.activeInHierarchy)
             AddRobberyDeclaration(Player3, ToTreasurePlayerId(2), Player3.SelectedCard, Player3.SelectedNumber,
-                Player3.HasBeenArrested, Player3.isEliminated, robberPlayers, robberyCounts);
+                Player3.HasBeenArrested, Player3.isEliminated, robberPlayers, robberyCounts, robberyEffects);
         if (Player4 != null && Player4.gameObject.activeInHierarchy)
             AddRobberyDeclaration(Player4, ToTreasurePlayerId(3), Player4.SelectedCard, Player4.SelectedNumber,
-                Player4.HasBeenArrested, Player4.isEliminated, robberPlayers, robberyCounts);
+                Player4.HasBeenArrested, Player4.isEliminated, robberPlayers, robberyCounts, robberyEffects);
 
         Debug.Log($"<color=#FF9F70>【行動カード→怪盗】逮捕されていない怪盗 {robberPlayers.Count}人</color>");
         int[] rewardPlayers = DetermineSuccessfulCageRewardPlayers();
         SpecialActionCardSystem.GrantCageRewards(rewardPlayers, handManager);
         treasureController.QueueArrestRewardDisplays(rewardPlayers);
         Debug.Log($"<color=#FFD966>【檻報酬連携】展示報酬 {rewardPlayers.Length}人</color>");
-        treasureController.BeginRobberyPhase(robberPlayers.ToArray(), robberyCounts.ToArray());
+        treasureController.BeginRobberyPhase(robberPlayers.ToArray(), robberyCounts.ToArray(),
+            robberyEffects.ToArray());
 
         while (treasureController.Phase != TreasureGame.TreasurePhase.Waiting &&
                treasureController.Phase != TreasureGame.TreasurePhase.GameOver)
@@ -363,7 +365,8 @@ public class CameraController : MonoBehaviour
         bool arrested,
         bool eliminated,
         List<int> robberPlayers,
-        List<int> robberyCounts)
+        List<int> robberyCounts,
+        List<int> robberyEffects)
     {
         if (participant == null || !participant.gameObject.activeInHierarchy || arrested || eliminated ||
             selectedCard == null || !selectedCard.isPhantomThief)
@@ -372,21 +375,12 @@ public class CameraController : MonoBehaviour
         int count = Mathf.Clamp(declaredCount, 1, 6);
         robberPlayers.Add(playerId);
         robberyCounts.Add(count);
+        robberyEffects.Add((int)selectedCard.specialEffect);
         Debug.Log($"【怪盗宣言】Player{playerId + 1}：{count}枚");
     }
 
     private int[] DetermineSuccessfulCageRewardPlayers()
     {
-        if (arrestHandler != null)
-        {
-            int[] successfulSeats = arrestHandler.GetSuccessfulCagePlayerIds();
-            int[] successfulPlayers = new int[successfulSeats.Length];
-            for (int i = 0; i < successfulSeats.Length; i++)
-                successfulPlayers[i] = ToTreasurePlayerId(successfulSeats[i]);
-            Debug.Log($"【檻報酬判定】実際に檻で逮捕したプレイヤー：{successfulPlayers.Length}人");
-            return successfulPlayers;
-        }
-
         var cagePlayers = new List<int>();
         int thiefCount = 0;
         CountActionForCageReward(ToTreasurePlayerId(0), Player != null ? Player.SelectedCard : null,

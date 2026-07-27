@@ -7,6 +7,10 @@ public static class SpecialActionCardSystem
     private static readonly HashSet<int> exhibitOnlyNextTurn = new HashSet<int>();
     private static readonly Dictionary<int, Quaternion> handRotations = new Dictionary<int, Quaternion>();
     private static readonly Dictionary<int, Vector3> handPositions = new Dictionary<int, Vector3>();
+    private static readonly Dictionary<int, CardInteraction> exhibitTemplates =
+        new Dictionary<int, CardInteraction>();
+    private static readonly Dictionary<int, CardInteraction> thiefTemplates =
+        new Dictionary<int, CardInteraction>();
     private static bool initialCardsDealt;
 
     public static void ResetSession()
@@ -15,6 +19,8 @@ public static class SpecialActionCardSystem
         exhibitOnlyNextTurn.Clear();
         handRotations.Clear();
         handPositions.Clear();
+        exhibitTemplates.Clear();
+        thiefTemplates.Clear();
     }
 
     public static void DealInitialCards(HandManager handManager)
@@ -97,22 +103,39 @@ public static class SpecialActionCardSystem
     {
         List<CardInteraction> ownerCards = GetCards(seat);
         if (ownerCards == null) return;
-        CardInteraction template = ownerCards.Find(card => card != null && card.isExhibit && !card.IsSpecialAction);
-        if (template == null)
+        if (!exhibitTemplates.TryGetValue(seat, out CardInteraction exhibitTemplate) ||
+            exhibitTemplate == null)
         {
-            Debug.LogWarning($"P{seat + 1}の展示カードを複製できないため、特殊カードを配布できません。");
+            exhibitTemplate =
+                ownerCards.Find(card => card != null && card.isExhibit && !card.IsSpecialAction);
+            if (exhibitTemplate != null) exhibitTemplates[seat] = exhibitTemplate;
+        }
+        if (!thiefTemplates.TryGetValue(seat, out CardInteraction thiefTemplate) ||
+            thiefTemplate == null)
+        {
+            thiefTemplate =
+                ownerCards.Find(card => card != null && card.isPhantomThief && !card.IsSpecialAction);
+            if (thiefTemplate != null) thiefTemplates[seat] = thiefTemplate;
+        }
+        if (exhibitTemplate == null || thiefTemplate == null)
+        {
+            Debug.LogWarning($"P{seat + 1}の展示または怪盗カードを複製できないため、特殊カードを配布できません。");
             return;
         }
         if (!handRotations.ContainsKey(seat))
         {
-            handRotations[seat] = template.transform.rotation;
-            handPositions[seat] = template.transform.position;
+            handRotations[seat] = exhibitTemplate.transform.rotation;
+            handPositions[seat] = exhibitTemplate.transform.position;
         }
 
         for (int i = 0; i < count; i++)
         {
             SpecialActionEffect effect = (SpecialActionEffect)Random.Range(
-                1, (int)SpecialActionEffect.FoolishGuard + 1);
+                1, (int)SpecialActionEffect.Balloon + 1);
+            bool needsThiefTemplate = effect == SpecialActionEffect.DisguiseMask ||
+                                      effect == SpecialActionEffect.WireBelt ||
+                                      effect == SpecialActionEffect.Balloon;
+            CardInteraction template = needsThiefTemplate ? thiefTemplate : exhibitTemplate;
             CardInteraction card = CreateCard(template, effect, seat);
             ownerCards.Add(card);
             if (seat == 0)
@@ -129,9 +152,12 @@ public static class SpecialActionCardSystem
         GameObject clone = Object.Instantiate(template.gameObject, template.transform.parent);
         CardInteraction card = clone.GetComponent<CardInteraction>();
         card.specialEffect = effect;
-        card.isExhibit = true;
-        card.isPhantomThief = false;
-        card.isCage = false;
+        card.isExhibit = effect != SpecialActionEffect.WireBelt &&
+                         effect != SpecialActionEffect.Balloon;
+        card.isPhantomThief = effect == SpecialActionEffect.DisguiseMask ||
+                              effect == SpecialActionEffect.WireBelt ||
+                              effect == SpecialActionEffect.Balloon;
+        card.isCage = effect == SpecialActionEffect.TransportVehicle;
         card.InitializeHandPose(handPositions[seat], handRotations[seat]);
 
         string imageName = effect == SpecialActionEffect.Truck ? "トラック" :
@@ -139,7 +165,11 @@ public static class SpecialActionCardSystem
             effect == SpecialActionEffect.Collector ? "コレクター" :
             effect == SpecialActionEffect.Guard ? "警備員" :
             effect == SpecialActionEffect.EerieGuard ? "怪奇な警備員" :
-            effect == SpecialActionEffect.FakeCop ? "偽警官" : "マヌケな警備員";
+            effect == SpecialActionEffect.FakeCop ? "偽警官" :
+            effect == SpecialActionEffect.FoolishGuard ? "マヌケな警備員" :
+            effect == SpecialActionEffect.TransportVehicle ? "護送車" :
+            effect == SpecialActionEffect.DisguiseMask ? "変装マスク" :
+            effect == SpecialActionEffect.WireBelt ? "ワイヤーベルト" : "バルーン";
         clone.name = $"特殊_{imageName}";
         Texture2D texture = Resources.Load<Texture2D>($"SpecialActionCards/{imageName}");
         Renderer renderer = clone.GetComponentInChildren<Renderer>();
@@ -153,6 +183,8 @@ public static class SpecialActionCardSystem
                 renderer.materials = materials;
             }
         }
+        // 没収済みで非表示になった通常カードを複製元にしても、報酬カードは手札へ表示する。
+        clone.SetActive(true);
         return card;
     }
 

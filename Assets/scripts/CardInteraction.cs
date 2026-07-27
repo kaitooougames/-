@@ -9,7 +9,11 @@ public enum SpecialActionEffect
     Guard,
     EerieGuard,
     FakeCop,
-    FoolishGuard
+    FoolishGuard,
+    TransportVehicle,
+    DisguiseMask,
+    WireBelt,
+    Balloon
 }
 
 public class CardInteraction : MonoBehaviour
@@ -58,7 +62,9 @@ public class CardInteraction : MonoBehaviour
     public SpecialActionEffect specialEffect = SpecialActionEffect.None;
     public bool IsSpecialAction => specialEffect != SpecialActionEffect.None;
     public int DisplayCount => specialEffect == SpecialActionEffect.LargeTruck ? 3 :
-        (specialEffect == SpecialActionEffect.Truck || specialEffect == SpecialActionEffect.Collector ? 2 : 1);
+        (specialEffect == SpecialActionEffect.Truck ||
+         specialEffect == SpecialActionEffect.Collector ||
+         specialEffect == SpecialActionEffect.TransportVehicle ? 2 : 1);
     public GameObject numberSelectionPanel; // 数字選択用のUIパネル
     private int selectedStealNumber = 0; // **選択した数字を保存**
     public StealNumberEffect effectPrefab; // **数字表示用のエフェクトプレハブ**

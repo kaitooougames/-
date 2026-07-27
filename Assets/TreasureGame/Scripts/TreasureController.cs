@@ -28,7 +28,8 @@ public class TreasureController : MonoBehaviour
     private readonly List<RobberyDeclaration> robberies = new List<RobberyDeclaration>();
     private readonly List<Treasure> stolenThisRobbery = new List<Treasure>();
     private readonly Dictionary<Player, List<Treasure>> stolenByRobber = new Dictionary<Player, List<Treasure>>();
-    private readonly Dictionary<Player, Treasure> robberDisplaySelections = new Dictionary<Player, Treasure>();
+    private readonly Dictionary<Player, List<Treasure>> robberDisplaySelections = new Dictionary<Player, List<Treasure>>();
+    private readonly Dictionary<Player, SpecialActionEffect> robberyEffects = new Dictionary<Player, SpecialActionEffect>();
     private readonly HashSet<Treasure> treasuresInTransit = new HashSet<Treasure>();
     private readonly HashSet<Player> blockedFromWinningThisTurn = new HashSet<Player>();
     private readonly HashSet<int> eliminatedPlayerIds = new HashSet<int>();
@@ -101,8 +102,14 @@ public class TreasureController : MonoBehaviour
             if (Phase == TreasurePhase.RobberDisplay)
             {
                 Player playerOne = players.Count > 0 ? players[0] : null;
-                if (playerOne != null && stolenByRobber.ContainsKey(playerOne) && !robberDisplaySelections.ContainsKey(playerOne))
-                    return "盗んだ宝から、展示する宝を1つ選んでください。";
+                if (playerOne != null && stolenByRobber.ContainsKey(playerOne))
+                {
+                    int selectedCount = robberDisplaySelections.TryGetValue(playerOne, out List<Treasure> selected)
+                        ? selected.Count : 0;
+                    int remaining = RequiredRobberDisplayCount(playerOne) - selectedCount;
+                    if (remaining > 0)
+                        return $"盗んだ宝から、展示する宝をあと{remaining}つ選んでください。";
+                }
                 return string.Empty;
             }
             if (Phase == TreasurePhase.Displaying) return string.Empty;
@@ -359,13 +366,22 @@ public class TreasureController : MonoBehaviour
     }
 
     // 行動カード開示時に怪盗プレイヤーと宣言枚数を渡す。枚数の大きい順に実行する。
-    public void BeginRobberyPhase(int[] playerIds, int[] declaredCounts)
+    public void BeginRobberyPhase(int[] playerIds, int[] declaredCounts, int[] specialEffects = null)
     {
-        robberies.Clear();
+        robberies.Clear(); robberyEffects.Clear();
         if (playerIds == null || declaredCounts == null) { ContinueToArrestRewardsOrEndTurn(); return; }
         int count = Mathf.Min(playerIds.Length, declaredCounts.Length);
         for (int i = 0; i < count; i++)
-            if (ValidPlayer(playerIds[i])) robberies.Add(new RobberyDeclaration(players[playerIds[i]], Mathf.Clamp(declaredCounts[i], 1, 6)));
+        {
+            if (!ValidPlayer(playerIds[i])) continue;
+            Player robber = players[playerIds[i]];
+            SpecialActionEffect effect = specialEffects != null && i < specialEffects.Length &&
+                                         System.Enum.IsDefined(typeof(SpecialActionEffect), specialEffects[i])
+                ? (SpecialActionEffect)specialEffects[i]
+                : SpecialActionEffect.None;
+            robberies.Add(new RobberyDeclaration(robber, Mathf.Clamp(declaredCounts[i], 1, 6)));
+            robberyEffects[robber] = effect;
+        }
         robberies.Sort((a, b) =>
         {
             int countOrder = b.Count.CompareTo(a.Count);
@@ -397,9 +413,16 @@ public class TreasureController : MonoBehaviour
         else if (Phase == TreasurePhase.Robbing) StartCoroutine(Steal(card));
         else if (Phase == TreasurePhase.RobberDisplay)
         {
-            robberDisplaySelections[card.Owner] = card;
-            Debug.Log($"【怪盗後の展示選択】プレイヤー{card.Owner.PlayerId + 1} が {card.name} を選択しました。");
-            if (robberDisplaySelections.Count == stolenByRobber.Count) StartCoroutine(ResolveRobberDisplays());
+            if (!robberDisplaySelections.TryGetValue(card.Owner, out List<Treasure> selected))
+            {
+                selected = new List<Treasure>();
+                robberDisplaySelections[card.Owner] = selected;
+            }
+            selected.Add(card);
+            int required = RequiredRobberDisplayCount(card.Owner);
+            Debug.Log($"【怪盗後の展示選択】プレイヤー{card.Owner.PlayerId + 1}：{selected.Count}/{required}枚");
+            card.SetInteractable(false);
+            if (AllRobberDisplaySelectionsComplete()) StartCoroutine(ResolveRobberDisplays());
         }
         RefreshInteraction();
     }
@@ -416,11 +439,15 @@ public class TreasureController : MonoBehaviour
                     card.Type == requiredType)
                 && selected.Count < requiredDisplayCounts[card.Owner] && !selected.Contains(card);
         if (Phase == TreasurePhase.Robbing)
-            return card.Location == TreasureLocation.Display && card.Owner != ActiveRobber && stealsRemaining > 0;
+            return card.Location == TreasureLocation.Display && card.Owner != ActiveRobber && stealsRemaining > 0
+                && (!robberyEffects.TryGetValue(ActiveRobber, out SpecialActionEffect effect) ||
+                    effect != SpecialActionEffect.Balloon || card.Type != TreasureType.Gold);
         if (Phase == TreasurePhase.RobberDisplay)
             return card.Location == TreasureLocation.Hand && stolenByRobber.TryGetValue(card.Owner, out List<Treasure> stolen)
                 && (card.Owner.PlayerId != 0 || card.Owner.HandVisible)
-                && stolen.Contains(card) && !robberDisplaySelections.ContainsKey(card.Owner);
+                && stolen.Contains(card)
+                && (!robberDisplaySelections.TryGetValue(card.Owner, out List<Treasure> selected) ||
+                    (selected.Count < RequiredRobberDisplayCount(card.Owner) && !selected.Contains(card)));
         return false;
     }
 
@@ -558,12 +585,15 @@ public class TreasureController : MonoBehaviour
         yield return MoveSelectedCardsBelowScreen(robberDisplaySelections);
         foreach (var pair in robberDisplaySelections)
         {
-            RecordDisplayBatch(pair.Key, new List<Treasure> { pair.Value });
-            pair.Key.AddToDisplay(pair.Value);
-            pair.Value.SetVisibleToLocalPlayer(true);
-            pair.Key.GetDisplayPose(pair.Value, out Vector3 p, out Quaternion r);
-            pair.Value.MoveTo(DisplayEntrance(p, r), r);
-            pair.Value.AnimateTo(p, r, moveDuration);
+            RecordDisplayBatch(pair.Key, pair.Value);
+            foreach (Treasure card in pair.Value)
+            {
+                pair.Key.AddToDisplay(card);
+                card.SetVisibleToLocalPlayer(true);
+                pair.Key.GetDisplayPose(card, out Vector3 p, out Quaternion r);
+                card.MoveTo(DisplayEntrance(p, r), r);
+                card.AnimateTo(p, r, moveDuration);
+            }
         }
         yield return new WaitForSeconds(moveDuration);
         if (robberDisplaySelections.ContainsKey(players[0]) && players[0].HandVisible)
@@ -580,13 +610,19 @@ public class TreasureController : MonoBehaviour
             if (stolenByRobber.ContainsKey(players[0]) && !players[0].HandVisible)
                 players[0].SetHandVisible(true, handSlideDuration);
             Phase = TreasurePhase.RobberDisplay;
-            Debug.Log($"<color=#FFD966>【怪盗後の展示選択】{PlayerList(new List<Player>(stolenByRobber.Keys))} は、今盗んだカードから1枚選んでください。全員決定後に同時展示します。</color>");
+            Debug.Log($"<color=#FFD966>【怪盗後の展示選択】盗品から必要枚数を選んでください。バルーンは最大3枚、それ以外は1枚です。</color>");
             RefreshInteraction();
             return;
         }
         int available = 0;
+        bool balloonRobbery = robberyEffects.TryGetValue(ActiveRobber, out SpecialActionEffect activeEffect) &&
+                              activeEffect == SpecialActionEffect.Balloon;
         for (int i = 0; i < playerCount; i++)
-            if (players[i] != ActiveRobber) available += players[i].DisplayedTreasures.Count;
+        {
+            if (players[i] == ActiveRobber) continue;
+            foreach (Treasure treasure in players[i].DisplayedTreasures)
+                if (!balloonRobbery || treasure.Type != TreasureType.Gold) available++;
+        }
         stealsRemaining = Mathf.Min(robberies[robberyIndex].Count, available);
         if (stealsRemaining == 0)
         {
@@ -598,6 +634,25 @@ public class TreasureController : MonoBehaviour
         Phase = TreasurePhase.Robbing;
         Debug.Log($"<color=#FF9F70>【怪盗中】プレイヤー{ActiveRobber.PlayerId + 1}：{stealsRemaining}枚盗んでください。</color>");
         RefreshInteraction();
+    }
+
+    private int RequiredRobberDisplayCount(Player player)
+    {
+        if (!stolenByRobber.TryGetValue(player, out List<Treasure> stolen)) return 0;
+        bool balloon = robberyEffects.TryGetValue(player, out SpecialActionEffect effect) &&
+                       effect == SpecialActionEffect.Balloon;
+        return Mathf.Min(balloon ? 3 : 1, stolen.Count);
+    }
+
+    private bool AllRobberDisplaySelectionsComplete()
+    {
+        foreach (Player player in stolenByRobber.Keys)
+        {
+            if (!robberDisplaySelections.TryGetValue(player, out List<Treasure> selected) ||
+                selected.Count < RequiredRobberDisplayCount(player))
+                return false;
+        }
+        return true;
     }
 
     private IEnumerator EndTurn()
@@ -761,7 +816,9 @@ public class TreasureController : MonoBehaviour
         List<Treasure> playerOneStolenCards = null;
         bool playerOneHasPendingStolenDisplay = playerOne != null &&
             stolenByRobber.TryGetValue(playerOne, out playerOneStolenCards) &&
-            playerOneStolenCards.Count > 0 && !robberDisplaySelections.ContainsKey(playerOne);
+            playerOneStolenCards.Count > 0 &&
+            (!robberDisplaySelections.TryGetValue(playerOne, out List<Treasure> robberSelected) ||
+             robberSelected.Count < RequiredRobberDisplayCount(playerOne));
 
         foreach (Treasure treasure in allTreasures)
         {
@@ -802,17 +859,6 @@ public class TreasureController : MonoBehaviour
                 Vector3 exit = card.transform.position + rotation * Vector3.forward * displaySlideDistance;
                 card.AnimateTo(exit, rotation, moveDuration);
             }
-        }
-        yield return new WaitForSeconds(moveDuration);
-    }
-
-    private IEnumerator MoveSelectedCardsBelowScreen(Dictionary<Player, Treasure> selections)
-    {
-        foreach (var pair in selections)
-        {
-            pair.Key.GetDisplayPose(pair.Value, out Vector3 target, out Quaternion rotation);
-            Vector3 exit = pair.Value.transform.position + rotation * Vector3.forward * displaySlideDistance;
-            pair.Value.AnimateTo(exit, rotation, moveDuration);
         }
         yield return new WaitForSeconds(moveDuration);
     }

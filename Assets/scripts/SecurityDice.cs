@@ -95,7 +95,9 @@ public class SecurityDice : MonoBehaviour
                 int chosenNumber = player.SelectedCard.SelectedNumber;
                 Debug.Log($"{player.name} の怪盗が選んだ数: {chosenNumber}");
 
-                if (chosenNumber > rolledNumber)
+                bool wireBeltSafe = player.SelectedCard.specialEffect == SpecialActionEffect.WireBelt &&
+                                    rolledNumber <= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe)
                 {
                     Debug.Log($"{player.name} の怪盗が逮捕されました！");
                     player.ShowArrestEffect(); // ペナルティを適用
@@ -112,7 +114,9 @@ public class SecurityDice : MonoBehaviour
                 int chosenNumber = player2.SelectedCard.SelectedNumber;
                 Debug.Log($"{player2.name} の怪盗が選んだ数: {chosenNumber}");
 
-                if (chosenNumber > rolledNumber)
+                bool wireBeltSafe = player2.SelectedCard.specialEffect == SpecialActionEffect.WireBelt &&
+                                    rolledNumber <= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe)
                 {
                     Debug.Log($"{player2.name} の怪盗が逮捕されました！");
                     player2.ShowArrestEffect(); // ペナルティを適用
@@ -129,7 +133,9 @@ public class SecurityDice : MonoBehaviour
                 int chosenNumber = player3.SelectedCard.SelectedNumber;
                 Debug.Log($"{player3.name} の怪盗が選んだ数: {chosenNumber}");
 
-                if (chosenNumber > rolledNumber)
+                bool wireBeltSafe = player3.SelectedCard.specialEffect == SpecialActionEffect.WireBelt &&
+                                    rolledNumber <= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe)
                 {
                     Debug.Log($"{player3.name} の怪盗が逮捕されました！");
                     player3.ShowArrestEffect(); // ペナルティを適用
@@ -146,7 +152,9 @@ public class SecurityDice : MonoBehaviour
                 int chosenNumber = player4.SelectedCard.SelectedNumber;
                 Debug.Log($"{player4.name} の怪盗が選んだ数: {chosenNumber}");
 
-                if (chosenNumber > rolledNumber)
+                bool wireBeltSafe = player4.SelectedCard.specialEffect == SpecialActionEffect.WireBelt &&
+                                    rolledNumber <= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe)
                 {
                     Debug.Log($"{player4.name} の怪盗が逮捕されました！");
                     player4.ShowArrestEffect(); // ペナルティを適用
