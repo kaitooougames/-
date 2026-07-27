@@ -72,6 +72,7 @@ public class CardInteraction : MonoBehaviour
     private bool pointerDown;
     private bool draggingHand;
     private bool selectedHoverLocked;
+    private bool handPoseInitialized;
     private Vector3 pointerDownPosition;
     private Vector3 lastPointerPosition;
     private const float HandDragThreshold = 12f;
@@ -95,9 +96,14 @@ public class CardInteraction : MonoBehaviour
 
     void Start()
     {
-        originalPosition = transform.position; // 初期位置を保持
-        originalRotation = transform.rotation;
-        originalScale = transform.localScale;
+        // 動的生成カードはInitializeHandPoseで先に基準位置を設定済み。
+        // 手札へ移動中の座標で上書きすると、最初のホバー時だけカードが飛んでしまう。
+        if (!handPoseInitialized)
+        {
+            originalPosition = transform.position; // 初期位置を保持
+            originalRotation = transform.rotation;
+            originalScale = transform.localScale;
+        }
         if (numberSelectionPanel) numberSelectionPanel.SetActive(false);
     }
 
@@ -282,6 +288,7 @@ public class CardInteraction : MonoBehaviour
 
     public void InitializeHandPose(Vector3 position, Quaternion rotation)
     {
+        handPoseInitialized = true;
         transform.position = position;
         transform.rotation = rotation;
         originalPosition = position;

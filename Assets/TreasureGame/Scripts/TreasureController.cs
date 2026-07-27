@@ -24,6 +24,7 @@ public class TreasureController : MonoBehaviour
     private readonly Dictionary<Player, List<Treasure>> displaySelections = new Dictionary<Player, List<Treasure>>();
     private readonly Dictionary<Player, int> requiredDisplayCounts = new Dictionary<Player, int>();
     private readonly Dictionary<Player, TreasureType> displayTypeRestrictions = new Dictionary<Player, TreasureType>();
+    private readonly HashSet<Player> optionalRelicDoubleDisplayPlayers = new HashSet<Player>();
     private readonly List<Player> displayPlayers = new List<Player>();
     private readonly List<RobberyDeclaration> robberies = new List<RobberyDeclaration>();
     private readonly List<Treasure> stolenThisRobbery = new List<Treasure>();
@@ -264,6 +265,7 @@ public class TreasureController : MonoBehaviour
     public void BeginTurn()
     {
         displaySelections.Clear(); requiredDisplayCounts.Clear(); displayTypeRestrictions.Clear();
+        optionalRelicDoubleDisplayPlayers.Clear();
         displayPlayers.Clear(); robberies.Clear(); stolenThisRobbery.Clear();
         stolenByRobber.Clear(); robberDisplaySelections.Clear();
         blockedFromWinningThisTurn.Clear();
@@ -292,7 +294,8 @@ public class TreasureController : MonoBehaviour
     // typeRestrictionsは-1で制限なし、それ以外はTreasureTypeの値。
     public void BeginDisplayPhase(int[] playerIds, int[] displayCounts, int[] typeRestrictions)
     {
-        displaySelections.Clear(); requiredDisplayCounts.Clear(); displayTypeRestrictions.Clear(); displayPlayers.Clear();
+        displaySelections.Clear(); requiredDisplayCounts.Clear(); displayTypeRestrictions.Clear();
+        optionalRelicDoubleDisplayPlayers.Clear(); displayPlayers.Clear();
         if (playerIds == null) { Phase = TreasurePhase.Waiting; RefreshInteraction(); return; }
         int inputCount = Mathf.Min(playerIds.Length, displayCounts != null ? displayCounts.Length : 0);
         for (int i = 0; i < inputCount; i++)
@@ -313,6 +316,9 @@ public class TreasureController : MonoBehaviour
             if (typeRestrictions != null && i < typeRestrictions.Length &&
                 System.Enum.IsDefined(typeof(TreasureType), typeRestrictions[i]))
                 displayTypeRestrictions[player] = (TreasureType)typeRestrictions[i];
+            else if (typeRestrictions != null && i < typeRestrictions.Length &&
+                     typeRestrictions[i] == -2)
+                optionalRelicDoubleDisplayPlayers.Add(player);
         }
         if (displayPlayers.Count == 0)
         {
@@ -335,7 +341,8 @@ public class TreasureController : MonoBehaviour
     public void DisplayAllTreasures(int[] playerIds)
     {
         if (playerIds == null || Phase != TreasurePhase.Waiting) return;
-        displaySelections.Clear(); requiredDisplayCounts.Clear(); displayTypeRestrictions.Clear(); displayPlayers.Clear();
+        displaySelections.Clear(); requiredDisplayCounts.Clear(); displayTypeRestrictions.Clear();
+        optionalRelicDoubleDisplayPlayers.Clear(); displayPlayers.Clear();
         foreach (int playerId in playerIds)
         {
             if (!ValidPlayer(playerId)) continue;
@@ -406,6 +413,9 @@ public class TreasureController : MonoBehaviour
         {
             List<Treasure> selected = displaySelections[card.Owner];
             if (!selected.Contains(card)) selected.Add(card);
+            if (optionalRelicDoubleDisplayPlayers.Contains(card.Owner) &&
+                selected.Count == 1 && card.Type != TreasureType.Relic)
+                requiredDisplayCounts[card.Owner] = 1;
             Debug.Log($"【展示選択】P{card.Owner.PlayerId + 1}：{selected.Count}/{requiredDisplayCounts[card.Owner]}枚");
             card.SetInteractable(false);
             if (AllDisplaySelectionsComplete()) StartCoroutine(ResolveDisplays());
@@ -437,6 +447,8 @@ public class TreasureController : MonoBehaviour
                 && displaySelections.TryGetValue(card.Owner, out List<Treasure> selected)
                 && (!displayTypeRestrictions.TryGetValue(card.Owner, out TreasureType requiredType) ||
                     card.Type == requiredType)
+                && (!optionalRelicDoubleDisplayPlayers.Contains(card.Owner) ||
+                    selected.Count == 0 || card.Type == TreasureType.Relic)
                 && selected.Count < requiredDisplayCounts[card.Owner] && !selected.Contains(card);
         if (Phase == TreasurePhase.Robbing)
             return card.Location == TreasureLocation.Display && card.Owner != ActiveRobber && stealsRemaining > 0
@@ -840,7 +852,10 @@ public class TreasureController : MonoBehaviour
             else if (playerOneHasPendingStolenDisplay)
             {
                 bool isStolenCard = playerOneStolenCards.Contains(treasure);
-                shouldDim = treasure.Owner == playerOne && treasure.Location == TreasureLocation.Hand && !isStolenCard;
+                bool alreadySelected = robberDisplaySelections.TryGetValue(playerOne, out List<Treasure> selectedStolen) &&
+                    selectedStolen.Contains(treasure);
+                shouldDim = treasure.Owner == playerOne && treasure.Location == TreasureLocation.Hand &&
+                    (!isStolenCard || alreadySelected);
             }
             treasure.SetInteractionState(canClick, shouldDim);
         }

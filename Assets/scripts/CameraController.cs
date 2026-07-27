@@ -187,10 +187,11 @@ public class CameraController : MonoBehaviour
         if (card.specialEffect == SpecialActionEffect.EerieGuard)
         {
             int relics = treasureController.GetHandTypeCount(playerId, TreasureGame.TreasureType.Relic);
-            if (relics > 0)
+            if (relics >= 2)
             {
-                counts.Add(Mathf.Min(2, relics));
-                typeRestrictions.Add((int)TreasureGame.TreasureType.Relic);
+                counts.Add(2);
+                // 1枚目は種類自由。遺物を選んだ場合だけ2枚目も遺物。
+                typeRestrictions.Add(-2);
                 return;
             }
         }
@@ -317,7 +318,6 @@ public class CameraController : MonoBehaviour
 
         Debug.Log($"<color=#FF9F70>【行動カード→怪盗】逮捕されていない怪盗 {robberPlayers.Count}人</color>");
         int[] rewardPlayers = DetermineSuccessfulCageRewardPlayers();
-        SpecialActionCardSystem.GrantCageRewards(rewardPlayers, handManager);
         treasureController.QueueArrestRewardDisplays(rewardPlayers);
         Debug.Log($"<color=#FFD966>【檻報酬連携】展示報酬 {rewardPlayers.Length}人</color>");
         treasureController.BeginRobberyPhase(robberPlayers.ToArray(), robberyCounts.ToArray(),
@@ -355,6 +355,10 @@ public class CameraController : MonoBehaviour
                 yield return null;
             }
         }
+
+        // 檻報酬の宝展示が完了してから、特殊行動カードを引く。
+        if (treasureController.Phase != TreasureGame.TreasurePhase.GameOver)
+            SpecialActionCardSystem.GrantCageRewards(rewardPlayers, handManager);
     }
 
     private static void AddRobberyDeclaration(

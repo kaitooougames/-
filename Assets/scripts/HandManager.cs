@@ -22,6 +22,9 @@ public class HandManager : MonoBehaviour
     [SerializeField] private Vector2 displayButtonOffset = new Vector2(0f, -105f);
     [SerializeField] private Vector2 playerCountsOffset = new Vector2(0f, -40f);
     [SerializeField] private Vector2 dayLabelOffset = new Vector2(-240f, 16f);
+    [Header("テスト用")]
+    [SerializeField] private bool showAllSpecialCardsButton = true;
+    [SerializeField] private Vector2 allSpecialCardsButtonOffset = new Vector2(16f, 16f);
     private int currentDay = 1;
     private float actionScrollOffset;
     private bool draggingActionHand;
@@ -312,6 +315,22 @@ public class HandManager : MonoBehaviour
         DrawPlayerDisplayControls(style);
         DrawPlayerCounts();
         DrawDayCounter();
+        DrawAllSpecialCardsTestButton(style);
+    }
+
+    private void DrawAllSpecialCardsTestButton(GUIStyle style)
+    {
+        if (!showAllSpecialCardsButton) return;
+        float width = 245f * uiScale;
+        float height = 44f * uiScale;
+        Rect rect = new Rect(
+            allSpecialCardsButtonOffset.x,
+            allSpecialCardsButtonOffset.y,
+            width, height);
+        GUI.enabled = !cardSelected && !gameFinished;
+        if (GUI.Button(rect, "テスト：P1に特殊カード全種類", style))
+            SpecialActionCardSystem.GrantAllSpecialCardsToPlayerOne(this);
+        GUI.enabled = true;
     }
 
     private void HandleActionHandScroll()
