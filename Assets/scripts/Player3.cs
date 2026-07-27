@@ -92,7 +92,7 @@ public class Player3 : MonoBehaviour
                 Debug.Log($"Player3 はすでに怪盗の数字を決めています。（{SelectedNumber}）");
                 return;
             }
-            SelectedNumber = Random.Range(1, 7); // 🔹 ここで怪盗の数字をセット
+            SelectedNumber = selectedCard.RandomDeclaredNumber();
             Debug.Log($"Player3 が怪盗を選んだ！盗む宝の数: {SelectedNumber}");
 
             ShowStealNumber(SelectedNumber);
@@ -137,6 +137,12 @@ public class Player3 : MonoBehaviour
             activeArrestEffect.ShowArrest();
         }
       
+    }
+
+    public void EndActionWithoutArrestPenalty()
+    {
+        HasBeenArrested = true;
+        hasAppliedPenalty = false;
     }
 
     public void ApplyPenalty()

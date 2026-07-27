@@ -7,6 +7,8 @@ public class SecurityDice : MonoBehaviour
     public int diceMin = 1; // サイコロの最小値
     public int diceMax = 6; // サイコロの最大値
     private int rolledNumber; // 出目
+    private int blackoutSkipsRemaining;
+    private readonly List<System.Action> pendingDiceArrests = new List<System.Action>();
     public DiceEffectController diceEffectController;
 
     private Player player;
@@ -70,6 +72,19 @@ public class SecurityDice : MonoBehaviour
 
     public void RollDice(List<Player> players)
     {
+        pendingDiceArrests.Clear();
+        if (HasUnarrestedSelectedEffect(SpecialActionEffect.BlackoutModule))
+        {
+            blackoutSkipsRemaining = 1;
+            Debug.Log("【停電モジュール】このターンと次のターンは警備サイコロを振りません。");
+            return;
+        }
+        if (blackoutSkipsRemaining > 0)
+        {
+            blackoutSkipsRemaining--;
+            Debug.Log("【停電モジュール】次ターン分の警備サイコロを振りません。");
+            return;
+        }
         bool fakeCopPlayed = HasSelectedEffect(SpecialActionEffect.FakeCop);
         // 逮捕されていない怪盗がいるかどうかを確認
         if (!HasUnarrestedPhantomThief(players) && !fakeCopPlayed)
@@ -85,7 +100,7 @@ public class SecurityDice : MonoBehaviour
 
         // 偽警官が出ていれば怪盗がいなくても振り、1で使用者自身が逮捕される。
         if (fakeCopPlayed && rolledNumber == 1)
-            ArrestFakeCopPlayers();
+            pendingDiceArrests.Add(ArrestFakeCopPlayers);
 
         // プレイヤーごとに処理を行う
         foreach (var player in players)
@@ -97,10 +112,12 @@ public class SecurityDice : MonoBehaviour
 
                 bool wireBeltSafe = player.SelectedCard.specialEffect == SpecialActionEffect.WireBelt &&
                                     rolledNumber <= 2;
-                if (chosenNumber > rolledNumber && !wireBeltSafe)
+                bool tearGasSafe = player.SelectedCard.specialEffect == SpecialActionEffect.TearGas &&
+                                   rolledNumber >= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
                 {
                     Debug.Log($"{player.name} の怪盗が逮捕されました！");
-                    player.ShowArrestEffect(); // ペナルティを適用
+                    ArrestBySecurityDice(player.SelectedCard, player.ShowArrestEffect);
                 }
                 else
                 {
@@ -116,10 +133,12 @@ public class SecurityDice : MonoBehaviour
 
                 bool wireBeltSafe = player2.SelectedCard.specialEffect == SpecialActionEffect.WireBelt &&
                                     rolledNumber <= 2;
-                if (chosenNumber > rolledNumber && !wireBeltSafe)
+                bool tearGasSafe = player2.SelectedCard.specialEffect == SpecialActionEffect.TearGas &&
+                                   rolledNumber >= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
                 {
                     Debug.Log($"{player2.name} の怪盗が逮捕されました！");
-                    player2.ShowArrestEffect(); // ペナルティを適用
+                    ArrestBySecurityDice(player2.SelectedCard, player2.ShowArrestEffect);
                 }
                 else
                 {
@@ -135,10 +154,12 @@ public class SecurityDice : MonoBehaviour
 
                 bool wireBeltSafe = player3.SelectedCard.specialEffect == SpecialActionEffect.WireBelt &&
                                     rolledNumber <= 2;
-                if (chosenNumber > rolledNumber && !wireBeltSafe)
+                bool tearGasSafe = player3.SelectedCard.specialEffect == SpecialActionEffect.TearGas &&
+                                   rolledNumber >= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
                 {
                     Debug.Log($"{player3.name} の怪盗が逮捕されました！");
-                    player3.ShowArrestEffect(); // ペナルティを適用
+                    ArrestBySecurityDice(player3.SelectedCard, player3.ShowArrestEffect);
                 }
                 else
                 {
@@ -154,10 +175,12 @@ public class SecurityDice : MonoBehaviour
 
                 bool wireBeltSafe = player4.SelectedCard.specialEffect == SpecialActionEffect.WireBelt &&
                                     rolledNumber <= 2;
-                if (chosenNumber > rolledNumber && !wireBeltSafe)
+                bool tearGasSafe = player4.SelectedCard.specialEffect == SpecialActionEffect.TearGas &&
+                                   rolledNumber >= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
                 {
                     Debug.Log($"{player4.name} の怪盗が逮捕されました！");
-                    player4.ShowArrestEffect(); // ペナルティを適用
+                    ArrestBySecurityDice(player4.SelectedCard, player4.ShowArrestEffect);
                 }
                 else
                 {
@@ -165,6 +188,26 @@ public class SecurityDice : MonoBehaviour
                 }
             }
         }
+    }
+
+    private void ArrestBySecurityDice(CardInteraction card, System.Action fallback)
+    {
+        pendingDiceArrests.Add(() =>
+        {
+            if (ArrestHandler.Instance != null)
+                ArrestHandler.Instance.ArrestFromExternalEffect(card);
+            else
+                fallback?.Invoke();
+        });
+    }
+
+    public void ResolvePendingDiceArrests()
+    {
+        if (pendingDiceArrests.Count == 0) return;
+        var resolutions = pendingDiceArrests.ToArray();
+        pendingDiceArrests.Clear();
+        foreach (System.Action resolution in resolutions)
+            resolution?.Invoke();
     }
 
     private bool HasSelectedEffect(SpecialActionEffect effect)
@@ -177,6 +220,18 @@ public class SecurityDice : MonoBehaviour
                 player3.SelectedCard.specialEffect == effect) ||
                (IsParticipating(player4) && !player4.isEliminated && player4.SelectedCard != null &&
                 player4.SelectedCard.specialEffect == effect);
+    }
+
+    private bool HasUnarrestedSelectedEffect(SpecialActionEffect effect)
+    {
+        return (player != null && !player.isEliminated && !player.HasBeenArrested &&
+                player.SelectedCard != null && player.SelectedCard.specialEffect == effect) ||
+               (IsParticipating(player2) && !player2.isEliminated && !player2.HasBeenArrested &&
+                player2.SelectedCard != null && player2.SelectedCard.specialEffect == effect) ||
+               (IsParticipating(player3) && !player3.isEliminated && !player3.HasBeenArrested &&
+                player3.SelectedCard != null && player3.SelectedCard.specialEffect == effect) ||
+               (IsParticipating(player4) && !player4.isEliminated && !player4.HasBeenArrested &&
+                player4.SelectedCard != null && player4.SelectedCard.specialEffect == effect);
     }
 
     private void ArrestFakeCopPlayers()

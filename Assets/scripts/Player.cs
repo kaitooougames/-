@@ -103,6 +103,12 @@ public class Player : MonoBehaviour
         }
     }
 
+    public void EndActionWithoutArrestPenalty()
+    {
+        HasBeenArrested = true;
+        hasAppliedPenalty = false;
+    }
+
 
     // 逮捕ペナルティ処理
     public void ApplyPenalty()

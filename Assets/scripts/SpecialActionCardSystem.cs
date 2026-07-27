@@ -12,10 +12,12 @@ public static class SpecialActionCardSystem
     private static readonly Dictionary<int, CardInteraction> thiefTemplates =
         new Dictionary<int, CardInteraction>();
     private static bool initialCardsDealt;
+    private static bool soloStageCreated;
 
     public static void ResetSession()
     {
         initialCardsDealt = false;
+        soloStageCreated = false;
         exhibitOnlyNextTurn.Clear();
         handRotations.Clear();
         handPositions.Clear();
@@ -58,21 +60,21 @@ public static class SpecialActionCardSystem
                 out CardInteraction thiefTemplate))
             return;
 
-        for (int value = 1; value <= (int)SpecialActionEffect.Balloon; value++)
+        for (int value = 1; value <= (int)SpecialActionEffect.TearGas; value++)
         {
             SpecialActionEffect effect = (SpecialActionEffect)value;
-            bool needsThiefTemplate = effect == SpecialActionEffect.DisguiseMask ||
-                                      effect == SpecialActionEffect.WireBelt ||
-                                      effect == SpecialActionEffect.Balloon;
+            if (effect == SpecialActionEffect.SoloStage && soloStageCreated) continue;
+            bool needsThiefTemplate = IsThiefEffect(effect);
             CardInteraction card = CreateCard(
                 needsThiefTemplate ? thiefTemplate : exhibitTemplate, effect, 0);
+            if (effect == SpecialActionEffect.SoloStage) soloStageCreated = true;
             ownerCards.Add(card);
             handManager.cards.Add(card);
             card.SetHandManager(handManager);
         }
         handManager.RefreshActionHandLayout();
         handManager.RefreshPlayerOneCardAvailability();
-        Debug.Log($"【テスト配布】Player1に特殊行動カード全{(int)SpecialActionEffect.Balloon}種類を配布しました。");
+        Debug.Log("【テスト配布】Player1に実装済み特殊行動カード全種類を配布しました。");
     }
 
     public static bool CanSelect(int seat, CardInteraction card)
@@ -135,13 +137,11 @@ public static class SpecialActionCardSystem
 
         for (int i = 0; i < count; i++)
         {
-            SpecialActionEffect effect = (SpecialActionEffect)Random.Range(
-                1, (int)SpecialActionEffect.Balloon + 1);
-            bool needsThiefTemplate = effect == SpecialActionEffect.DisguiseMask ||
-                                      effect == SpecialActionEffect.WireBelt ||
-                                      effect == SpecialActionEffect.Balloon;
+            SpecialActionEffect effect = RandomAvailableEffect();
+            bool needsThiefTemplate = IsThiefEffect(effect);
             CardInteraction template = needsThiefTemplate ? thiefTemplate : exhibitTemplate;
             CardInteraction card = CreateCard(template, effect, seat);
+            if (effect == SpecialActionEffect.SoloStage) soloStageCreated = true;
             ownerCards.Add(card);
             if (seat == 0)
             {
@@ -150,6 +150,28 @@ public static class SpecialActionCardSystem
             }
         }
         Debug.Log($"【特殊カード配布】P{seat + 1}に{count}枚");
+    }
+
+    private static SpecialActionEffect RandomAvailableEffect()
+    {
+        SpecialActionEffect effect;
+        do
+        {
+            effect = (SpecialActionEffect)Random.Range(1, (int)SpecialActionEffect.TearGas + 1);
+        }
+        while (effect == SpecialActionEffect.SoloStage && soloStageCreated);
+        return effect;
+    }
+
+    private static bool IsThiefEffect(SpecialActionEffect effect)
+    {
+        return effect == SpecialActionEffect.DisguiseMask ||
+               effect == SpecialActionEffect.WireBelt ||
+               effect == SpecialActionEffect.Balloon ||
+               effect == SpecialActionEffect.FrameUp ||
+               effect == SpecialActionEffect.SoloStage ||
+               effect == SpecialActionEffect.BlackoutModule ||
+               effect == SpecialActionEffect.TearGas;
     }
 
     private static bool TryGetTemplates(int seat, List<CardInteraction> ownerCards,
@@ -188,11 +210,16 @@ public static class SpecialActionCardSystem
         GameObject clone = Object.Instantiate(template.gameObject, template.transform.parent);
         CardInteraction card = clone.GetComponent<CardInteraction>();
         card.specialEffect = effect;
-        card.isExhibit = effect != SpecialActionEffect.WireBelt &&
-                         effect != SpecialActionEffect.Balloon;
+        // 怪盗系で展示効果も持つのは変装マスクだけ。
+        card.isExhibit = !IsThiefEffect(effect) ||
+                         effect == SpecialActionEffect.DisguiseMask;
         card.isPhantomThief = effect == SpecialActionEffect.DisguiseMask ||
                               effect == SpecialActionEffect.WireBelt ||
-                              effect == SpecialActionEffect.Balloon;
+                              effect == SpecialActionEffect.Balloon ||
+                              effect == SpecialActionEffect.FrameUp ||
+                              effect == SpecialActionEffect.SoloStage ||
+                              effect == SpecialActionEffect.BlackoutModule ||
+                              effect == SpecialActionEffect.TearGas;
         card.isCage = effect == SpecialActionEffect.TransportVehicle;
         card.InitializeHandPose(handPositions[seat], handRotations[seat]);
 
@@ -205,7 +232,11 @@ public static class SpecialActionCardSystem
             effect == SpecialActionEffect.FoolishGuard ? "マヌケな警備員" :
             effect == SpecialActionEffect.TransportVehicle ? "護送車" :
             effect == SpecialActionEffect.DisguiseMask ? "変装マスク" :
-            effect == SpecialActionEffect.WireBelt ? "ワイヤーベルト" : "バルーン";
+            effect == SpecialActionEffect.WireBelt ? "ワイヤーベルト" :
+            effect == SpecialActionEffect.Balloon ? "バルーン" :
+            effect == SpecialActionEffect.FrameUp ? "濡れ衣" :
+            effect == SpecialActionEffect.SoloStage ? "独擅場" :
+            effect == SpecialActionEffect.BlackoutModule ? "停電モジュール" : "催涙スプレー";
         clone.name = $"特殊_{imageName}";
         Texture2D texture = Resources.Load<Texture2D>($"SpecialActionCards/{imageName}");
         Renderer renderer = clone.GetComponentInChildren<Renderer>();

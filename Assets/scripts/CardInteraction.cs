@@ -13,7 +13,11 @@ public enum SpecialActionEffect
     TransportVehicle,
     DisguiseMask,
     WireBelt,
-    Balloon
+    Balloon,
+    FrameUp,
+    SoloStage,
+    BlackoutModule,
+    TearGas
 }
 
 public class CardInteraction : MonoBehaviour
@@ -65,6 +69,22 @@ public class CardInteraction : MonoBehaviour
         (specialEffect == SpecialActionEffect.Truck ||
          specialEffect == SpecialActionEffect.Collector ||
          specialEffect == SpecialActionEffect.TransportVehicle ? 2 : 1);
+
+    public bool AllowsDeclaredNumber(int number)
+    {
+        if (specialEffect == SpecialActionEffect.SoloStage) return number == 3;
+        if (specialEffect == SpecialActionEffect.BlackoutModule) return number >= 1 && number <= 4;
+        if (specialEffect == SpecialActionEffect.TearGas) return number >= 1 && number <= 3;
+        return number >= 1 && number <= 6;
+    }
+
+    public int RandomDeclaredNumber()
+    {
+        if (specialEffect == SpecialActionEffect.SoloStage) return 3;
+        if (specialEffect == SpecialActionEffect.BlackoutModule) return Random.Range(1, 5);
+        if (specialEffect == SpecialActionEffect.TearGas) return Random.Range(1, 4);
+        return Random.Range(1, 7);
+    }
     public GameObject numberSelectionPanel; // 数字選択用のUIパネル
     private int selectedStealNumber = 0; // **選択した数字を保存**
     public StealNumberEffect effectPrefab; // **数字表示用のエフェクトプレハブ**
@@ -440,9 +460,10 @@ public class CardInteraction : MonoBehaviour
         {
             numberSelectionPanel.SetActive(true);
 
-            NumberButton[] buttons = numberSelectionPanel.GetComponentsInChildren<NumberButton>();
+            NumberButton[] buttons = numberSelectionPanel.GetComponentsInChildren<NumberButton>(true);
             foreach (var button in buttons)
             {
+                button.gameObject.SetActive(AllowsDeclaredNumber(button.number));
                 button.SetPhantomThiefCard(this);
             }
         }

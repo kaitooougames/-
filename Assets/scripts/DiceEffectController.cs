@@ -14,6 +14,8 @@ public class DiceEffectController : MonoBehaviour
 
     public void StartDiceRoll(int result)
     {
+        if (resultText != null)
+            resultText.gameObject.SetActive(false);
         if (!isRolling)
             StartCoroutine(RollDice(result));
     }

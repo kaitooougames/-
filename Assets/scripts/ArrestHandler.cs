@@ -4,6 +4,7 @@ using System.Linq;
 
 public class ArrestHandler : MonoBehaviour
 {
+    public static ArrestHandler Instance { get; private set; }
     public ArrestEffect arrestEffectPrefab; // 逮捕エフェクトのプレハブ
     private List<CardInteraction> fieldCards = new List<CardInteraction>(); // 場のカード
     private List<CardInteraction> phantomThieves = new List<CardInteraction>(); // 怪盗カード
@@ -11,11 +12,20 @@ public class ArrestHandler : MonoBehaviour
     public List<ArrestEffect> currentBattingEffects = new List<ArrestEffect>();
     private readonly List<int> successfulCagePlayerIds = new List<int>();
     private readonly Dictionary<CardInteraction, int> fieldCardOwners = new Dictionary<CardInteraction, int>();
+    private CardInteraction pendingFrameUpCard;
+    private readonly List<CardInteraction> pendingFrameUpTargets = new List<CardInteraction>();
+    public bool HasPendingFrameUpChoice => pendingFrameUpCard != null;
     [SerializeField] ArrestHandler arrestHandler; // ArrestHandlerを参照
 
 
     private void Start()
     {
+        if (Instance != null && Instance != this)
+        {
+            enabled = false;
+            return;
+        }
+        Instance = this;
         CardInteraction.OnAllCardsFlipped -= ResolveArrests; // 二重登録を防ぐために先に解除
         // カードのめくりイベントに登録
         CardInteraction.OnAllCardsFlipped += ResolveArrests;
@@ -25,6 +35,7 @@ public class ArrestHandler : MonoBehaviour
     {
         // イベントの登録解除（メモリリーク防止）
         CardInteraction.OnAllCardsFlipped -= ResolveArrests;
+        if (Instance == this) Instance = null;
     }
 
     public void ResolveArrests()
@@ -105,6 +116,7 @@ public class ArrestHandler : MonoBehaviour
 
         // **怪盗の競合処理**
         HandleThiefConflict(); // 🔹 檻がいなくても競合チェックを実行
+        HandleSoloStageEffect();
         HandleSpecialGuardEffects();
 
         // **檻が0なら怪盗の競合のみ行い、以降の処理はスキップ**
@@ -138,6 +150,8 @@ public class ArrestHandler : MonoBehaviour
 
                 foreach (var thief in group)
                 {
+                    if (thief.specialEffect == SpecialActionEffect.SoloStage)
+                        continue;
                     Debug.Log($"逮捕対象の怪盗: {thief.name}");
                     Arrest(thief);
                 }
@@ -167,7 +181,11 @@ public class ArrestHandler : MonoBehaviour
     {
         // 警備員ですでに逮捕済みでも、檻の対応対象なら檻は成功・報酬あり。
         // 逮捕ペナルティそのものはArrest内で二重発動を防ぐ。
-        phantomThieves = phantomThieves.OrderBy(t => t.SelectedNumber).ToList();
+        phantomThieves = phantomThieves
+            .OrderBy(t => t.SelectedNumber)
+            // 同じ宣言数3で競合した場合だけ、独壇場ではない怪盗を先に檻へ割り当てる。
+            .ThenBy(t => t.specialEffect == SpecialActionEffect.SoloStage ? 1 : 0)
+            .ToList();
 
         for (int i = 0; i < cages.Count && i < phantomThieves.Count; i++)
         {
@@ -176,6 +194,18 @@ public class ArrestHandler : MonoBehaviour
             int cagePlayerId = FindPlayerIdByCard(cages[i]);
             if (cagePlayerId >= 0 && !successfulCagePlayerIds.Contains(cagePlayerId))
                 successfulCagePlayerIds.Add(cagePlayerId);
+        }
+    }
+
+    private void HandleSoloStageEffect()
+    {
+        if (!phantomThieves.Any(t => t.specialEffect == SpecialActionEffect.SoloStage)) return;
+        foreach (CardInteraction thief in phantomThieves)
+        {
+            if (thief.specialEffect == SpecialActionEffect.SoloStage)
+                continue;
+            Debug.Log($"【独壇場】{thief.name}を即逮捕");
+            Arrest(thief);
         }
     }
 
@@ -188,6 +218,8 @@ public class ArrestHandler : MonoBehaviour
 
         foreach (CardInteraction thief in phantomThieves)
         {
+            if (thief.specialEffect == SpecialActionEffect.TearGas)
+                continue;
             int number = thief.SelectedNumber;
             bool caught = (guardPlayed && number >= 3 && number <= 6) ||
                           (eerieGuardPlayed && number % 2 == 1) ||
@@ -212,6 +244,11 @@ public class ArrestHandler : MonoBehaviour
         return successfulCagePlayerIds.ToArray();
     }
 
+    public void ArrestFromExternalEffect(CardInteraction card)
+    {
+        Arrest(card);
+    }
+
     private int FindPlayerIdByCard(CardInteraction card)
     {
         return card != null && fieldCardOwners.TryGetValue(card, out int playerId)
@@ -221,6 +258,9 @@ public class ArrestHandler : MonoBehaviour
 
     private bool Arrest(CardInteraction card)
     {
+        if (card == null) return false;
+        if (card.specialEffect == SpecialActionEffect.FrameUp && TryStartFrameUp(card))
+            return true;
         Debug.Log($"{card.name} が逮捕されました！");
         bool arrested = false;
 
@@ -256,6 +296,93 @@ public class ArrestHandler : MonoBehaviour
             arrested = true;
         }
         return arrested;
+    }
+
+    private bool TryStartFrameUp(CardInteraction card)
+    {
+        if (pendingFrameUpCard == card) return true;
+        var targets = fieldCards.Where(c => c != null && c != card && c.isExhibit &&
+            !c.IsSpecialAction && !IsCardOwnerArrested(c)).ToList();
+        if (targets.Count == 0) return false;
+
+        int ownerId = FindPlayerIdByCard(card);
+        if (ownerId == 0)
+        {
+            pendingFrameUpCard = card;
+            pendingFrameUpTargets.Clear();
+            pendingFrameUpTargets.AddRange(targets);
+            Debug.Log("【濡れ衣】逮捕を移す通常展示プレイヤーを選んでください。");
+        }
+        else
+        {
+            TransferFrameUp(card, targets[Random.Range(0, targets.Count)]);
+        }
+        return true;
+    }
+
+    private void TransferFrameUp(CardInteraction source, CardInteraction target)
+    {
+        EndOwnerActionWithoutPenalty(source);
+        Debug.Log($"【濡れ衣】{source.name}の逮捕を{target.name}へ移しました。");
+        Arrest(target);
+        pendingFrameUpCard = null;
+        pendingFrameUpTargets.Clear();
+    }
+
+    private void EndOwnerActionWithoutPenalty(CardInteraction card)
+    {
+        Player p1 = FindPlayerByCard(card);
+        if (p1 != null) { p1.EndActionWithoutArrestPenalty(); return; }
+        Player2 p2 = FindPlayer2ByCard(card);
+        if (p2 != null) { p2.EndActionWithoutArrestPenalty(); return; }
+        Player3 p3 = FindPlayer3ByCard(card);
+        if (p3 != null) { p3.EndActionWithoutArrestPenalty(); return; }
+        Player4 p4 = FindPlayer4ByCard(card);
+        if (p4 != null) p4.EndActionWithoutArrestPenalty();
+    }
+
+    private bool IsCardOwnerArrested(CardInteraction card)
+    {
+        Player p1 = FindPlayerByCard(card);
+        if (p1 != null) return p1.HasBeenArrested;
+        Player2 p2 = FindPlayer2ByCard(card);
+        if (p2 != null) return p2.HasBeenArrested;
+        Player3 p3 = FindPlayer3ByCard(card);
+        if (p3 != null) return p3.HasBeenArrested;
+        Player4 p4 = FindPlayer4ByCard(card);
+        return p4 != null && p4.HasBeenArrested;
+    }
+
+    private void OnGUI()
+    {
+        if (pendingFrameUpCard == null) return;
+        GUIStyle messageStyle = new GUIStyle(GUI.skin.box)
+        {
+            fontSize = 30,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        GUIStyle buttonStyle = new GUIStyle(GUI.skin.button)
+        {
+            fontSize = 28,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        GUI.Box(new Rect(Screen.width * 0.5f - 380f, 28f, 760f, 105f),
+            "濡れ衣：逮捕を移すプレイヤーを選んでください", messageStyle);
+        float width = 190f;
+        float startX = Screen.width * 0.5f - pendingFrameUpTargets.Count * width * 0.5f;
+        for (int i = 0; i < pendingFrameUpTargets.Count; i++)
+        {
+            CardInteraction target = pendingFrameUpTargets[i];
+            int playerId = FindPlayerIdByCard(target);
+            if (GUI.Button(new Rect(startX + i * width, 145f, width - 12f, 72f),
+                    $"Player {playerId + 1}", buttonStyle))
+            {
+                TransferFrameUp(pendingFrameUpCard, target);
+                break;
+            }
+        }
     }
 
     // Player の検索

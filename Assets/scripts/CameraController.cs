@@ -70,6 +70,8 @@ public class CameraController : MonoBehaviour
         FlipAllCards(); // 普通に呼び出す
 
         yield return new WaitForSeconds(2f);
+        while (ArrestHandler.Instance != null && ArrestHandler.Instance.HasPendingFrameUpChoice)
+            yield return null;
         yield return StartCoroutine(MoveCameraCoroutine(secondTargetPosition, secondTargetRotation));
 
         // 行動カードを確認してカメラが通常位置へ戻ってから、お宝の展示を始める。
@@ -277,6 +279,13 @@ public class CameraController : MonoBehaviour
             ? securityDice.diceEffectController
             : null;
         while (diceEffect != null && diceEffect.IsRolling)
+            yield return null;
+        // 出目が静止・表示された状態を少し見せてから逮捕判定へ進む。
+        if (diceEffect != null)
+            yield return new WaitForSeconds(0.35f);
+        securityDice?.ResolvePendingDiceArrests();
+        // 警備サイコロで濡れ衣が発動した場合も、移し替え先の選択完了を待つ。
+        while (ArrestHandler.Instance != null && ArrestHandler.Instance.HasPendingFrameUpChoice)
             yield return null;
 
         // サイコロと檻のどちらかで逮捕された怪盗は、ここで除外される。
