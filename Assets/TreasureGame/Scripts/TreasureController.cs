@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace TreasureGame
 {
-public enum TreasurePhase { Waiting, SelectingDisplays, Displaying, Robbing, RobberDisplay, EndingTurn, GameOver }
+public enum TreasurePhase { Waiting, SelectingDisplays, Displaying, Inspecting, Robbing, RobberDisplay, EndingTurn, GameOver }
 
 public class TreasureController : MonoBehaviour
 {
@@ -31,6 +31,11 @@ public class TreasureController : MonoBehaviour
     private readonly Dictionary<Player, List<Treasure>> stolenByRobber = new Dictionary<Player, List<Treasure>>();
     private readonly Dictionary<Player, List<Treasure>> robberDisplaySelections = new Dictionary<Player, List<Treasure>>();
     private readonly Dictionary<Player, SpecialActionEffect> robberyEffects = new Dictionary<Player, SpecialActionEffect>();
+    private readonly HashSet<Player> analysisCompleted = new HashSet<Player>();
+    private readonly List<Treasure> analysisSelections = new List<Treasure>();
+    private Player analysisRobber;
+    private int requiredAnalysisCount;
+    private bool analysisResolving;
     private readonly HashSet<Treasure> treasuresInTransit = new HashSet<Treasure>();
     private readonly HashSet<Player> blockedFromWinningThisTurn = new HashSet<Player>();
     private readonly HashSet<int> eliminatedPlayerIds = new HashSet<int>();
@@ -99,6 +104,10 @@ public class TreasureController : MonoBehaviour
             if (Phase == TreasurePhase.Robbing)
                 return ActiveRobber != null && ActiveRobber.PlayerId == 0
                     ? $"他の展示室から宝をあと{stealsRemaining}つ盗んでください。"
+                    : string.Empty;
+            if (Phase == TreasurePhase.Inspecting)
+                return analysisRobber != null && analysisRobber.PlayerId == 0
+                    ? $"分析メガネ：真贋を確認する宝をあと{Mathf.Max(0, requiredAnalysisCount - analysisSelections.Count)}つ選んでください。"
                     : string.Empty;
             if (Phase == TreasurePhase.RobberDisplay)
             {
@@ -375,7 +384,7 @@ public class TreasureController : MonoBehaviour
     // 行動カード開示時に怪盗プレイヤーと宣言枚数を渡す。枚数の大きい順に実行する。
     public void BeginRobberyPhase(int[] playerIds, int[] declaredCounts, int[] specialEffects = null)
     {
-        robberies.Clear(); robberyEffects.Clear();
+        robberies.Clear(); robberyEffects.Clear(); analysisCompleted.Clear();
         if (playerIds == null || declaredCounts == null) { ContinueToArrestRewardsOrEndTurn(); return; }
         int count = Mathf.Min(playerIds.Length, declaredCounts.Length);
         for (int i = 0; i < count; i++)
@@ -421,6 +430,17 @@ public class TreasureController : MonoBehaviour
             if (AllDisplaySelectionsComplete()) StartCoroutine(ResolveDisplays());
         }
         else if (Phase == TreasurePhase.Robbing) StartCoroutine(Steal(card));
+        else if (Phase == TreasurePhase.Inspecting)
+        {
+            analysisSelections.Add(card);
+            card.AnimateFlipToFaceUp(0.35f);
+            Debug.Log($"【分析メガネ】P{analysisRobber.PlayerId + 1}：{analysisSelections.Count}/{requiredAnalysisCount}枚確認");
+            if (analysisSelections.Count >= requiredAnalysisCount)
+            {
+                analysisResolving = true;
+                StartCoroutine(FinishAnalysisInspection());
+            }
+        }
         else if (Phase == TreasurePhase.RobberDisplay)
         {
             if (!robberDisplaySelections.TryGetValue(card.Owner, out List<Treasure> selected))
@@ -454,6 +474,11 @@ public class TreasureController : MonoBehaviour
             return card.Location == TreasureLocation.Display && card.Owner != ActiveRobber && stealsRemaining > 0
                 && (!robberyEffects.TryGetValue(ActiveRobber, out SpecialActionEffect effect) ||
                     effect != SpecialActionEffect.Balloon || card.Type != TreasureType.Gold);
+        if (Phase == TreasurePhase.Inspecting)
+            return !analysisResolving && analysisRobber != null && analysisRobber.PlayerId == 0 &&
+                   card.Location == TreasureLocation.Display && card.Owner != analysisRobber &&
+                   !analysisSelections.Contains(card) &&
+                   analysisSelections.Count < requiredAnalysisCount;
         if (Phase == TreasurePhase.RobberDisplay)
             return card.Location == TreasureLocation.Hand && stolenByRobber.TryGetValue(card.Owner, out List<Treasure> stolen)
                 && (card.Owner.PlayerId != 0 || card.Owner.HandVisible)
@@ -626,6 +651,13 @@ public class TreasureController : MonoBehaviour
             RefreshInteraction();
             return;
         }
+        if (robberyEffects.TryGetValue(ActiveRobber, out SpecialActionEffect pendingEffect) &&
+            pendingEffect == SpecialActionEffect.AnalysisGlasses &&
+            !analysisCompleted.Contains(ActiveRobber))
+        {
+            StartCoroutine(BeginAnalysisInspection(ActiveRobber));
+            return;
+        }
         int available = 0;
         bool balloonRobbery = robberyEffects.TryGetValue(ActiveRobber, out SpecialActionEffect activeEffect) &&
                               activeEffect == SpecialActionEffect.Balloon;
@@ -646,6 +678,63 @@ public class TreasureController : MonoBehaviour
         Phase = TreasurePhase.Robbing;
         Debug.Log($"<color=#FF9F70>【怪盗中】プレイヤー{ActiveRobber.PlayerId + 1}：{stealsRemaining}枚盗んでください。</color>");
         RefreshInteraction();
+    }
+
+    private IEnumerator BeginAnalysisInspection(Player robber)
+    {
+        analysisRobber = robber;
+        analysisSelections.Clear();
+        analysisResolving = false;
+        var candidates = new List<Treasure>();
+        for (int i = 0; i < playerCount; i++)
+        {
+            if (players[i] == robber) continue;
+            candidates.AddRange(players[i].DisplayedTreasures);
+        }
+        requiredAnalysisCount = Mathf.Min(3, candidates.Count);
+        if (requiredAnalysisCount == 0)
+        {
+            analysisCompleted.Add(robber);
+            analysisRobber = null;
+            StartNextRobbery();
+            yield break;
+        }
+
+        Phase = TreasurePhase.Inspecting;
+        RefreshInteraction();
+        Debug.Log($"<color=#70E8FF>【分析メガネ】P{robber.PlayerId + 1}が展示品{requiredAnalysisCount}枚を確認します。</color>");
+
+        if (robber.PlayerId != 0)
+        {
+            while (analysisSelections.Count < requiredAnalysisCount && candidates.Count > 0)
+            {
+                int index = Random.Range(0, candidates.Count);
+                Treasure chosen = candidates[index];
+                candidates.RemoveAt(index);
+                analysisSelections.Add(chosen);
+                RefreshInteraction();
+                yield return new WaitForSeconds(0.35f);
+            }
+            analysisResolving = true;
+            RefreshInteraction();
+            yield return StartCoroutine(FinishAnalysisInspection());
+        }
+    }
+
+    private IEnumerator FinishAnalysisInspection()
+    {
+        RefreshInteraction();
+        yield return new WaitForSeconds(1.8f);
+        if (analysisRobber != null && analysisRobber.PlayerId == 0)
+            foreach (Treasure treasure in analysisSelections)
+                treasure.AnimateFlipToFaceDown(0.35f);
+        yield return new WaitForSeconds(0.45f);
+        if (analysisRobber != null) analysisCompleted.Add(analysisRobber);
+        analysisSelections.Clear();
+        analysisRobber = null;
+        analysisResolving = false;
+        Phase = TreasurePhase.Displaying;
+        StartNextRobbery();
     }
 
     private int RequiredRobberDisplayCount(Player player)
@@ -831,6 +920,8 @@ public class TreasureController : MonoBehaviour
             requiredDisplayCounts.TryGetValue(playerOne, out int required) &&
             displaySelections.TryGetValue(playerOne, out List<Treasure> selected) && selected.Count < required;
         bool playerOneRobbing = Phase == TreasurePhase.Robbing && ActiveRobber == playerOne;
+        bool analysisActive = Phase == TreasurePhase.Inspecting &&
+                              analysisRobber != null;
         List<Treasure> playerOneStolenCards = null;
         bool playerOneHasPendingStolenDisplay = playerOne != null &&
             stolenByRobber.TryGetValue(playerOne, out playerOneStolenCards) &&
@@ -840,6 +931,24 @@ public class TreasureController : MonoBehaviour
 
         foreach (Treasure treasure in allTreasures)
         {
+            bool selectedForAnalysis = analysisSelections.Contains(treasure);
+            bool forceAnalysisDim = false;
+            if (analysisActive && treasure.Location == TreasureLocation.Display)
+            {
+                if (analysisRobber.PlayerId == 0)
+                {
+                    // 分析者本人の画面：自分の展示室だけ対象外として暗くする。
+                    // 他人の展示品はすべて明るいまま選択できる。
+                    forceAnalysisDim = treasure.Owner == analysisRobber;
+                }
+                else
+                {
+                    // 分析者以外の画面：選ばれた宝だけ明るくし、
+                    // どの3枚が分析されたかは分かるが真贋は見せない。
+                    forceAnalysisDim = !selectedForAnalysis;
+                }
+            }
+            treasure.SetForcedDim(forceAnalysisDim);
             bool visibleToPlayerOne = FreeInteractionMode || treasuresInTransit.Contains(treasure) ||
                 treasure.Location == TreasureLocation.Display ||
                 (treasure.Owner != null && treasure.Owner.PlayerId == 0);

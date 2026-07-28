@@ -59,6 +59,7 @@ public class Player : MonoBehaviour
 
     public void OnCardsRevealed()
     {
+        if (SpecialActionCardSystem.IsDetectiveExcluded(SelectedCard)) return;
         if (SelectedNumber > 0)
         {
             ShowStealNumber(SelectedNumber);
@@ -74,7 +75,7 @@ public class Player : MonoBehaviour
     {
         if (activeStealEffect != null)
         {
-            Debug.LogWarning("StealNumberEffect がすでに表示されているため、新しく作成しません。");
+            activeStealEffect.ShowNumber(number);
             return;
         }
 

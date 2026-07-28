@@ -29,6 +29,7 @@ public class Treasure : MonoBehaviour
     private bool interactable;
     private bool dimWhenDisabled = true;
     private bool highlighted;
+    private bool forcedDim;
 
     public TreasureType Type => type;
     public Authenticity Authenticity => authenticity;
@@ -173,6 +174,13 @@ public class Treasure : MonoBehaviour
         ApplyBrightness();
     }
 
+    public void SetForcedDim(bool value)
+    {
+        if (forcedDim == value) return;
+        forcedDim = value;
+        ApplyBrightness();
+    }
+
     public void MoveTo(Vector3 position, Quaternion rotation)
     {
         layoutPosition = position;
@@ -262,12 +270,14 @@ public class Treasure : MonoBehaviour
 
     private void ApplyBrightness()
     {
-        float brightness = interactable ? (highlighted ? 1.45f : 1.15f)
+        float brightness = forcedDim
+            ? (highlighted ? 0.62f : 0.35f)
+            : interactable ? (highlighted ? 1.45f : 1.15f)
             : (dimWhenDisabled ? 0.35f : 1f);
         WriteBaseColor(frontMaterial, frontBaseColor, brightness);
         WriteBaseColor(backMaterial, backBaseColor, brightness);
 
-        Color emission = interactable
+        Color emission = interactable && !forcedDim
             ? new Color(0.22f, 0.18f, 0.025f) * (highlighted ? 3f : 1f)
             : Color.black;
         WriteEmission(frontMaterial, emission);

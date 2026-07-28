@@ -35,6 +35,7 @@ public class HandManager : MonoBehaviour
     public bool ActionHandVisible => actionHandVisible;
     public int ActionPlayerCount => actionPlayerCount;
     public bool CardSelected => cardSelected;
+    public int CurrentDay => currentDay;
 
     public int ToTreasurePlayerId(int actionSeatId)
     {
@@ -273,11 +274,13 @@ public class HandManager : MonoBehaviour
     {
         Player playerOne = FindFirstObjectByType<Player>(FindObjectsInactive.Include);
         bool thiefBlocked = playerOne != null && playerOne.IsFirstOffense();
+        bool actionBlocked = SpecialActionCardSystem.CannotActToday(0);
         foreach (CardInteraction card in cards)
         {
             if (card == null) continue;
             bool collectorBlocked = SpecialActionCardSystem.IsExhibitOnly(0) && !card.isExhibit;
-            if (!actionHandVisible || gameFinished || (thiefBlocked && card.isPhantomThief) || collectorBlocked)
+            if (!actionHandVisible || gameFinished || actionBlocked ||
+                (thiefBlocked && card.isPhantomThief) || collectorBlocked)
                 card.DisableClick();
             else
                 card.EnableClick();
@@ -436,9 +439,11 @@ public class HandManager : MonoBehaviour
                 : (player4 != null && player4.player4Cards != null ? player4.player4Cards.Count : 0);
             int treasureId = ToTreasurePlayerId(id);
             int treasureCount = treasureController != null ? treasureController.GetHandCount(treasureId) : 0;
+            string prisonStatus = SpecialActionCardSystem.IsImprisoned(id) ? "  【監獄】" :
+                SpecialActionCardSystem.IsExcludedFromActionToday(id) ? "  【休み】" : "";
             GUI.Label(new Rect(startX + width * i, Screen.height + playerCountsOffset.y * uiScale,
                     width, 34f * uiScale),
-                $"P{id + 1}  行動:{actionCount}  宝:{treasureCount}", style);
+                $"P{id + 1}  行動:{actionCount}  宝:{treasureCount}{prisonStatus}", style);
         }
     }
 
@@ -492,6 +497,7 @@ public class HandManager : MonoBehaviour
     public void MoveCardsAfterThiefPhase()
     {
         SpecialActionCardSystem.ConsumeSelectedCards(this);
+        SpecialActionCardSystem.ClearTurnEffects();
         currentDay++;
         actionHandVisible = true;
         cardSelected = false;

@@ -74,6 +74,7 @@ public class Player4 : MonoBehaviour
     // **カードがめくられた後に呼ばれるメソッド**
     public void OnCardsRevealed()
     {
+        if (SpecialActionCardSystem.IsDetectiveExcluded(selectedCard)) return;
         if (isEliminated)
         {
             Debug.Log($"{name} はすでに脱落しています。ペナルティ適用なし。");
@@ -91,6 +92,7 @@ public class Player4 : MonoBehaviour
             if (SelectedNumber != 0)
             {
                 Debug.Log($"Player4 はすでに怪盗の数字を決めています。（{SelectedNumber}）");
+                ShowStealNumber(SelectedNumber);
                 return;
             }
             SelectedNumber = selectedCard.RandomDeclaredNumber();
@@ -102,7 +104,7 @@ public class Player4 : MonoBehaviour
     {
         if (activeStealEffect != null)
         {
-            Debug.LogWarning("StealNumberEffect がすでに表示されているため、新しく作成しません。");
+            activeStealEffect.ShowNumber(number);
             return;
         }
 

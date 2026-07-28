@@ -5,6 +5,11 @@ using UnityEngine;
 public static class SpecialActionCardSystem
 {
     private static readonly HashSet<int> exhibitOnlyNextTurn = new HashSet<int>();
+    private static readonly HashSet<CardInteraction> detectiveExcludedCards = new HashSet<CardInteraction>();
+    private static readonly Dictionary<int, int> imprisonedUntilEndOfDay =
+        new Dictionary<int, int>();
+    private static readonly Dictionary<int, int> excludedActionDay =
+        new Dictionary<int, int>();
     private static readonly Dictionary<int, Quaternion> handRotations = new Dictionary<int, Quaternion>();
     private static readonly Dictionary<int, Vector3> handPositions = new Dictionary<int, Vector3>();
     private static readonly Dictionary<int, CardInteraction> exhibitTemplates =
@@ -21,6 +26,9 @@ public static class SpecialActionCardSystem
         soloStageCreated = false;
         watchdogCreated = false;
         exhibitOnlyNextTurn.Clear();
+        detectiveExcludedCards.Clear();
+        imprisonedUntilEndOfDay.Clear();
+        excludedActionDay.Clear();
         handRotations.Clear();
         handPositions.Clear();
         exhibitTemplates.Clear();
@@ -87,7 +95,7 @@ public static class SpecialActionCardSystem
                 out CardInteraction thiefTemplate))
             return;
 
-        for (int value = 1; value <= (int)SpecialActionEffect.Watchdog; value++)
+        for (int value = 1; value <= (int)SpecialActionEffect.AnalysisGlasses; value++)
         {
             SpecialActionEffect effect = (SpecialActionEffect)value;
             if (effect == SpecialActionEffect.SoloStage && soloStageCreated) continue;
@@ -106,9 +114,78 @@ public static class SpecialActionCardSystem
         Debug.Log("【テスト配布】Player1に実装済み特殊行動カード全種類を配布しました。");
     }
 
+    public static void MarkDetectiveExcluded(CardInteraction card)
+    {
+        if (card != null) detectiveExcludedCards.Add(card);
+    }
+
+    public static bool IsDetectiveExcluded(CardInteraction card) =>
+        card != null && detectiveExcludedCards.Contains(card);
+
+    public static void ClearTurnEffects()
+    {
+        detectiveExcludedCards.Clear();
+    }
+
+    public static void GrantDetectiveReward(
+        int actionSeat, int rewardCount, HandManager handManager)
+    {
+        GrantCardsToSeat(actionSeat, rewardCount, handManager);
+        handManager?.RefreshActionHandLayout();
+    }
+
+    public static bool IsImprisoned(int seat) =>
+        imprisonedUntilEndOfDay.ContainsKey(seat);
+
+    public static void ExcludeFromNextDay(int seat, int currentDay)
+    {
+        if (seat < 0) return;
+        excludedActionDay[seat] = currentDay + 1;
+        Debug.Log($"<color=#72E6FF>【通電ステッキ】Player{seat + 1}は{currentDay + 1}日目の行動を休みます。</color>");
+    }
+
+    public static bool IsExcludedFromActionToday(int seat)
+    {
+        int currentDay = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1;
+        return excludedActionDay.TryGetValue(seat, out int excludedDay) &&
+               excludedDay == currentDay;
+    }
+
+    public static bool CannotActToday(int seat) =>
+        IsImprisoned(seat) || IsExcludedFromActionToday(seat);
+
+    public static void Imprison(int seat, int currentDay)
+    {
+        if (seat < 0) return;
+        // 逮捕された当日の終了時には振らず、翌日終了時から釈放判定を始める。
+        imprisonedUntilEndOfDay[seat] = Mathf.Max(currentDay + 1,
+            imprisonedUntilEndOfDay.TryGetValue(seat, out int day) ? day : 0);
+        Debug.Log($"<color=#BFA8FF>【監獄】Player{seat + 1}を収監。{currentDay + 1}日目の終了時から釈放判定。</color>");
+    }
+
+    public static List<int> GetPrisonersEligibleForRelease(int currentDay)
+    {
+        List<int> eligible = new List<int>();
+        foreach (KeyValuePair<int, int> prisoner in imprisonedUntilEndOfDay)
+            if (currentDay >= prisoner.Value) eligible.Add(prisoner.Key);
+        eligible.Sort();
+        return eligible;
+    }
+
+    public static bool ResolvePrisonReleaseRoll(int seat, int result)
+    {
+        if (!IsImprisoned(seat)) return false;
+        bool released = result <= 2;
+        Debug.Log($"<color=#BFA8FF>【監獄釈放サイコロ】Player{seat + 1}：{result} → " +
+                  (released ? "釈放！" : "収監継続") + "</color>");
+        if (released) imprisonedUntilEndOfDay.Remove(seat);
+        return released;
+    }
+
     public static bool CanSelect(int seat, CardInteraction card)
     {
-        return card != null && (!exhibitOnlyNextTurn.Contains(seat) || card.isExhibit);
+        return card != null && !CannotActToday(seat) &&
+               (!exhibitOnlyNextTurn.Contains(seat) || card.isExhibit);
     }
 
     public static bool IsExhibitOnly(int seat) => exhibitOnlyNextTurn.Contains(seat);
@@ -187,7 +264,8 @@ public static class SpecialActionCardSystem
         SpecialActionEffect effect;
         do
         {
-            effect = (SpecialActionEffect)Random.Range(1, (int)SpecialActionEffect.Watchdog + 1);
+            effect = (SpecialActionEffect)Random.Range(
+                1, (int)SpecialActionEffect.AnalysisGlasses + 1);
         }
         while ((effect == SpecialActionEffect.SoloStage && soloStageCreated) ||
                (effect == SpecialActionEffect.Watchdog && watchdogCreated));
@@ -202,7 +280,9 @@ public static class SpecialActionCardSystem
                effect == SpecialActionEffect.FrameUp ||
                effect == SpecialActionEffect.SoloStage ||
                effect == SpecialActionEffect.BlackoutModule ||
-               effect == SpecialActionEffect.TearGas;
+               effect == SpecialActionEffect.TearGas ||
+               effect == SpecialActionEffect.ElectricBaton ||
+               effect == SpecialActionEffect.AnalysisGlasses;
     }
 
     private static bool TryGetTemplates(int seat, List<CardInteraction> ownerCards,
@@ -242,7 +322,9 @@ public static class SpecialActionCardSystem
         CardInteraction card = clone.GetComponent<CardInteraction>();
         card.specialEffect = effect;
         // 怪盗系で展示効果も持つのは変装マスクだけ。
-        card.isExhibit = (!IsThiefEffect(effect) && effect != SpecialActionEffect.Watchdog) ||
+        card.isExhibit = (!IsThiefEffect(effect) &&
+                          effect != SpecialActionEffect.Watchdog &&
+                          effect != SpecialActionEffect.Prison) ||
                          effect == SpecialActionEffect.DisguiseMask;
         card.isPhantomThief = effect == SpecialActionEffect.DisguiseMask ||
                               effect == SpecialActionEffect.WireBelt ||
@@ -250,9 +332,12 @@ public static class SpecialActionCardSystem
                               effect == SpecialActionEffect.FrameUp ||
                               effect == SpecialActionEffect.SoloStage ||
                               effect == SpecialActionEffect.BlackoutModule ||
-                              effect == SpecialActionEffect.TearGas;
+                              effect == SpecialActionEffect.TearGas ||
+                              effect == SpecialActionEffect.ElectricBaton ||
+                              effect == SpecialActionEffect.AnalysisGlasses;
         card.isCage = effect == SpecialActionEffect.TransportVehicle ||
-                      effect == SpecialActionEffect.Watchdog;
+                      effect == SpecialActionEffect.Watchdog ||
+                      effect == SpecialActionEffect.Prison;
         card.InitializeHandPose(handPositions[seat], handRotations[seat]);
 
         string imageName = effect == SpecialActionEffect.Truck ? "トラック" :
@@ -270,8 +355,15 @@ public static class SpecialActionCardSystem
             effect == SpecialActionEffect.SoloStage ? "独擅場" :
             effect == SpecialActionEffect.BlackoutModule ? "停電モジュール" : "催涙スプレー";
         if (effect == SpecialActionEffect.Watchdog) imageName = "番犬";
+        if (effect == SpecialActionEffect.Detective) imageName = "名探偵";
+        if (effect == SpecialActionEffect.Prison) imageName = "監獄";
+        if (effect == SpecialActionEffect.ElectricBaton) imageName = "通電ステッキ";
+        // macOS上の画像名は「ガ」がカ＋結合濁点のNFD形式で保存されている。
+        if (effect == SpecialActionEffect.AnalysisGlasses) imageName = "分析メカ\u3099ネ";
         clone.name = $"特殊_{imageName}";
         Texture2D texture = Resources.Load<Texture2D>($"SpecialActionCards/{imageName}");
+        if (texture == null)
+            Debug.LogWarning($"特殊行動カード画像を読み込めません: SpecialActionCards/{imageName}");
         Renderer renderer = clone.GetComponentInChildren<Renderer>();
         if (renderer != null && texture != null)
         {

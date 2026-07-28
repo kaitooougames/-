@@ -24,6 +24,16 @@ public class CameraController : MonoBehaviour
     public Player3 Player3;
     public Player4 Player4;
     public ArrestEffect arrestEffect; // ← インスペクターでアタッチする
+    private bool detectiveChoiceActive;
+    private int detectiveChosenSeat = -1;
+    private readonly List<int> detectiveTargetSeats = new List<int>();
+    private int prisonRollSeat = -1;
+    private string prisonRollMessage = "";
+    private readonly Dictionary<int, StealNumberEffect> prisonFloorMarkers =
+        new Dictionary<int, StealNumberEffect>();
+    private string detectiveAnnouncement = "";
+    private AudioSource detectiveAudioSource;
+    private AudioClip detectiveWrongClip;
     public bool PlayerDisplayViewActive => playerDisplayViewActive;
     public bool IsCameraMoving => isCameraMoving;
 
@@ -44,7 +54,16 @@ public class CameraController : MonoBehaviour
         {
             Debug.LogError("プレイヤーがシーン内に見つかりません！");
         }
+        detectiveAudioSource = GetComponent<AudioSource>();
+        if (detectiveAudioSource == null)
+            detectiveAudioSource = gameObject.AddComponent<AudioSource>();
+        detectiveWrongClip = CreateDetectiveWrongClip();
     }
+    private void Update()
+    {
+        SyncPrisonFloorMarkers();
+    }
+
     public void MoveCamera()
     {
         if (isCameraMoving)
@@ -67,6 +86,7 @@ public class CameraController : MonoBehaviour
 
         yield return new WaitForSeconds(1f);
 
+        yield return StartCoroutine(ResolveDetectivesBeforeReveal());
         FlipAllCards(); // 普通に呼び出す
 
         yield return new WaitForSeconds(2f);
@@ -82,6 +102,254 @@ public class CameraController : MonoBehaviour
         TriggerSecurityDice();
 
         isCameraMoving = false;
+    }
+
+    private IEnumerator ResolveDetectivesBeforeReveal()
+    {
+        List<int> detectiveSeats = new List<int>();
+        Dictionary<int, int> choicesByDetective = new Dictionary<int, int>();
+
+        // 名探偵は全員先に公開する。指名結果は全員が選び終わるまで判定しない。
+        for (int seat = 0; seat < 4; seat++)
+        {
+            CardInteraction detectiveCard = GetSelectedActionCard(seat);
+            if (!IsActionSeatActive(seat) || detectiveCard == null ||
+                detectiveCard.specialEffect != SpecialActionEffect.Detective)
+                continue;
+
+            detectiveCard.RevealBeforeAllCards();
+            detectiveSeats.Add(seat);
+        }
+        if (detectiveSeats.Count == 0) yield break;
+
+        yield return new WaitForSeconds(0.8f);
+
+        // 指名段階。前の名探偵の選択や成否は、後の名探偵には公開されない。
+        foreach (int detectiveSeat in detectiveSeats)
+        {
+            detectiveTargetSeats.Clear();
+            for (int targetSeat = 0; targetSeat < 4; targetSeat++)
+                if (targetSeat != detectiveSeat && IsActionSeatActive(targetSeat) &&
+                    GetSelectedActionCard(targetSeat) != null)
+                    detectiveTargetSeats.Add(targetSeat);
+            if (detectiveTargetSeats.Count == 0) continue;
+
+            int chosenSeat;
+            if (detectiveSeat == 0)
+            {
+                detectiveChosenSeat = -1;
+                detectiveChoiceActive = true;
+                while (detectiveChosenSeat < 0) yield return null;
+                detectiveChoiceActive = false;
+                chosenSeat = detectiveChosenSeat;
+            }
+            else
+            {
+                chosenSeat = detectiveTargetSeats[Random.Range(0, detectiveTargetSeats.Count)];
+            }
+            choicesByDetective[detectiveSeat] = chosenSeat;
+            Debug.Log($"【名探偵指名】Player{detectiveSeat + 1} → Player{chosenSeat + 1}");
+        }
+
+        // 正解した指名だけを、指名先ごとにまとめる。
+        Dictionary<int, List<int>> successfulDetectivesByTarget =
+            new Dictionary<int, List<int>>();
+        foreach (KeyValuePair<int, int> choice in choicesByDetective)
+        {
+            CardInteraction targetCard = GetSelectedActionCard(choice.Value);
+            detectiveAnnouncement =
+                $"Player{choice.Key + 1}の名探偵 → Player{choice.Value + 1}を指名";
+            if (targetCard != null)
+            {
+                yield return StartCoroutine(targetCard.BlinkAsDetectiveTarget());
+            }
+            if (targetCard == null || !targetCard.isPhantomThief)
+            {
+                Debug.Log($"【名探偵失敗】Player{choice.Key + 1}の指名先Player{choice.Value + 1}は怪盗ではありません。");
+                PlayDetectiveWrongSound();
+                yield return new WaitForSeconds(0.85f);
+                continue;
+            }
+
+            targetCard.RevealBeforeAllCards();
+            yield return new WaitForSeconds(0.55f);
+            if (!successfulDetectivesByTarget.TryGetValue(
+                    choice.Value, out List<int> successfulDetectives))
+            {
+                successfulDetectives = new List<int>();
+                successfulDetectivesByTarget.Add(choice.Value, successfulDetectives);
+            }
+            successfulDetectives.Add(choice.Key);
+        }
+
+        // 一斉判定。怪盗の逮捕は1回、報酬は単独正解なら2枚、同じ怪盗への複数正解なら各1枚。
+        foreach (KeyValuePair<int, List<int>> result in successfulDetectivesByTarget)
+        {
+            CardInteraction targetCard = GetSelectedActionCard(result.Key);
+            if (targetCard == null) continue;
+
+            SpecialActionCardSystem.MarkDetectiveExcluded(targetCard);
+            ArrestHandler.Instance?.ArrestFromExternalEffect(targetCard);
+
+            int rewardCount = result.Value.Count >= 2 ? 1 : 2;
+            foreach (int detectiveSeat in result.Value)
+                SpecialActionCardSystem.GrantDetectiveReward(
+                    detectiveSeat, rewardCount, handManager);
+
+            Debug.Log(
+                $"【名探偵成功】Player{result.Key + 1}の怪盗を逮捕・当日除外。" +
+                $"正解者{result.Value.Count}人、各自の特殊カード報酬{rewardCount}枚");
+        }
+        detectiveAnnouncement = "まもなく全員の行動カードを公開します";
+        yield return new WaitForSeconds(1.25f);
+        detectiveAnnouncement = "";
+    }
+
+    private AudioClip CreateDetectiveWrongClip()
+    {
+        const int sampleRate = 44100;
+        const float duration = 0.48f;
+        int sampleCount = Mathf.RoundToInt(sampleRate * duration);
+        float[] samples = new float[sampleCount];
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float time = i / (float)sampleRate;
+            float frequency = time < 0.22f ? 185f : 125f;
+            float envelope = Mathf.Clamp01((duration - time) * 7f);
+            samples[i] = Mathf.Sin(2f * Mathf.PI * frequency * time) * 0.34f * envelope;
+        }
+        AudioClip clip = AudioClip.Create(
+            "DetectiveWrong", sampleCount, 1, sampleRate, false);
+        clip.SetData(samples, 0);
+        return clip;
+    }
+
+    private void PlayDetectiveWrongSound()
+    {
+        if (detectiveAudioSource != null && detectiveWrongClip != null)
+            detectiveAudioSource.PlayOneShot(detectiveWrongClip);
+    }
+
+    private CardInteraction GetSelectedActionCard(int seat)
+    {
+        if (seat == 0) return Player != null ? Player.SelectedCard : null;
+        if (seat == 1) return Player2 != null ? Player2.SelectedCard : null;
+        if (seat == 2) return Player3 != null ? Player3.SelectedCard : null;
+        return Player4 != null ? Player4.SelectedCard : null;
+    }
+
+    private bool IsActionSeatActive(int seat)
+    {
+        if (SpecialActionCardSystem.CannotActToday(seat)) return false;
+        if (seat == 0) return Player != null && !Player.isEliminated;
+        if (seat == 1) return Player2 != null && Player2.gameObject.activeInHierarchy && !Player2.isEliminated;
+        if (seat == 2) return Player3 != null && Player3.gameObject.activeInHierarchy && !Player3.isEliminated;
+        return Player4 != null && Player4.gameObject.activeInHierarchy && !Player4.isEliminated;
+    }
+
+    private void OnGUI()
+    {
+        DrawPrisonRollMessage();
+        DrawDetectiveAnnouncement();
+        if (!detectiveChoiceActive) return;
+        GUIStyle boxStyle = new GUIStyle(GUI.skin.box)
+        {
+            fontSize = 30, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter
+        };
+        GUIStyle buttonStyle = new GUIStyle(GUI.skin.button)
+        {
+            fontSize = 28, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter
+        };
+        GUI.Box(new Rect(Screen.width * 0.5f - 380f, 28f, 760f, 105f),
+            "名探偵：怪盗だと思うプレイヤーを指名してください", boxStyle);
+        float width = 190f;
+        float startX = Screen.width * 0.5f - detectiveTargetSeats.Count * width * 0.5f;
+        for (int i = 0; i < detectiveTargetSeats.Count; i++)
+        {
+            int seat = detectiveTargetSeats[i];
+            if (GUI.Button(new Rect(startX + i * width, 145f, width - 12f, 72f),
+                    $"Player {seat + 1}", buttonStyle))
+            {
+                detectiveChosenSeat = seat;
+                break;
+            }
+        }
+    }
+
+    private void DrawDetectiveAnnouncement()
+    {
+        if (string.IsNullOrEmpty(detectiveAnnouncement)) return;
+        GUIStyle style = new GUIStyle(GUI.skin.box)
+        {
+            fontSize = 28,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        style.normal.textColor = Color.white;
+        GUI.Box(new Rect(Screen.width * 0.5f - 390f, 28f, 780f, 88f),
+            detectiveAnnouncement, style);
+    }
+
+    private void DrawPrisonRollMessage()
+    {
+        if (prisonRollSeat < 0) return;
+        GUIStyle messageStyle = new GUIStyle(GUI.skin.box)
+        {
+            fontSize = 30,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        messageStyle.normal.textColor = Color.white;
+        GUI.Box(new Rect(Screen.width * 0.5f - 390f, 28f, 780f, 90f),
+            prisonRollMessage, messageStyle);
+    }
+
+    private void SyncPrisonFloorMarkers()
+    {
+        Vector3[] markerPositions =
+        {
+            new Vector3(0.7f, 0f, -1.17f),
+            new Vector3(-0.7f, 0f, 1.17f),
+            new Vector3(-1.8f, 0f, 0f),
+            new Vector3(1.8f, 0f, 0f)
+        };
+
+        for (int seat = 0; seat < markerPositions.Length; seat++)
+        {
+            bool shouldShow = SpecialActionCardSystem.IsImprisoned(seat) &&
+                              IsActionSeatConfigured(seat);
+            bool hasMarker = prisonFloorMarkers.TryGetValue(
+                seat, out StealNumberEffect marker) && marker != null;
+            if (!shouldShow)
+            {
+                if (hasMarker) Destroy(marker.gameObject);
+                prisonFloorMarkers.Remove(seat);
+                continue;
+            }
+            if (hasMarker) continue;
+
+            StealNumberEffect template = GetNumberEffectPrefab(seat);
+            if (template == null) continue;
+            marker = Instantiate(template, markerPositions[seat], Quaternion.identity);
+            marker.ShowPrisonStatus();
+            prisonFloorMarkers[seat] = marker;
+        }
+    }
+
+    private StealNumberEffect GetNumberEffectPrefab(int seat)
+    {
+        if (seat == 0) return Player != null ? Player.effectPrefab : null;
+        if (seat == 1) return Player2 != null ? Player2.effectPrefab : null;
+        if (seat == 2) return Player3 != null ? Player3.effectPrefab : null;
+        return Player4 != null ? Player4.effectPrefab : null;
+    }
+
+    private bool IsActionSeatConfigured(int seat)
+    {
+        if (seat == 0) return Player != null;
+        if (seat == 1) return Player2 != null && Player2.gameObject.activeInHierarchy;
+        if (seat == 2) return Player3 != null && Player3.gameObject.activeInHierarchy;
+        return Player4 != null && Player4.gameObject.activeInHierarchy;
     }
 
     public void SetPlayerDisplayView(bool active)
@@ -246,15 +514,27 @@ public class CameraController : MonoBehaviour
         isFlipping = true;
        
         Debug.Log("FlipAllCards() が呼ばれた" + Time.frameCount);
-        CardInteraction[] allCards = FindObjectsOfType<CardInteraction>();
-        CardInteraction.PrepareFlipCount(allCards.Length);
-        foreach (var card in allCards)
+        var selectedCards = new List<CardInteraction>();
+        for (int seat = 0; seat < 4; seat++)
+        {
+            CardInteraction selected = GetSelectedActionCard(seat);
+            if (selected != null && IsActionSeatConfigured(seat) &&
+                !selectedCards.Contains(selected))
+                selectedCards.Add(selected);
+        }
+        if (selectedCards.Count == 0)
+        {
+            Debug.LogWarning("公開する行動カードがありません。");
+            isFlipping = false;
+            return;
+        }
+
+        CardInteraction.PrepareFlipCount(selectedCards.Count);
+        foreach (CardInteraction card in selectedCards)
         {
             Debug.Log($"カード {card.name} をめくる処理を実行");
             card.FlipCard();
         }
-     
-     
     }
 
     private void TriggerSecurityDice()
@@ -467,6 +747,12 @@ public class CameraController : MonoBehaviour
     public void kaitou()
     {
         Debug.Log("怪盗フェーズ終了！");
+        StartCoroutine(FinishActionTurn());
+    }
+
+    private IEnumerator FinishActionTurn()
+    {
+        yield return StartCoroutine(RollPrisonReleaseDice());
         handManager.MoveCardsAfterThiefPhase();
        
         cardInteraction.MoveCardsAfterThiefPhase();
@@ -477,7 +763,46 @@ public class CameraController : MonoBehaviour
         arrestEffect.MoveCardsAfterThiefPhase();
 
         StartCoroutine(Wait());
-       
+
+    }
+
+    private IEnumerator RollPrisonReleaseDice()
+    {
+        if (handManager == null) yield break;
+        List<int> prisoners =
+            SpecialActionCardSystem.GetPrisonersEligibleForRelease(handManager.CurrentDay);
+        DiceEffectController dice = securityDice != null
+            ? securityDice.diceEffectController
+            : null;
+
+        foreach (int seat in prisoners)
+        {
+            int result = Random.Range(1, 7);
+            prisonRollSeat = seat;
+            prisonRollMessage =
+                $"Player{seat + 1}が監獄の釈放サイコロを振っています";
+            Debug.Log($"<color=#BFA8FF>【監獄】Player{seat + 1}が釈放サイコロを振ります。</color>");
+            if (dice != null)
+            {
+                while (dice.IsRolling) yield return null;
+                dice.StartDiceRoll(result);
+                // StartCoroutine内でIsRollingが立つ次フレームまで待つ。
+                yield return null;
+                while (dice.IsRolling) yield return null;
+                yield return new WaitForSeconds(0.65f);
+            }
+            bool released =
+                SpecialActionCardSystem.ResolvePrisonReleaseRoll(seat, result);
+            prisonRollMessage = released
+                ? $"Player{seat + 1}：{result}が出たため脱獄成功しました"
+                : $"Player{seat + 1}：{result}が出たため脱獄失敗しました";
+            yield return new WaitForSeconds(1.8f);
+            prisonRollSeat = -1;
+            prisonRollMessage = "";
+            yield return new WaitForSeconds(0.65f);
+        }
+        prisonRollSeat = -1;
+        prisonRollMessage = "";
     }
     private IEnumerator Wait()
     {
@@ -507,6 +832,14 @@ public class CameraController : MonoBehaviour
         yield return new WaitForSeconds(2f);
         cardInteraction.EnableCardClicks(); // カードクリック再開
         if (handManager != null) handManager.RefreshPlayerOneCardAvailability();
+        if (SpecialActionCardSystem.CannotActToday(0))
+        {
+            Debug.Log("<color=#BFA8FF>【行動休止】Player1はこの日の行動を休みます。</color>");
+            Player2?.SelectRandomCard();
+            Player3?.SelectRandomCard();
+            Player4?.SelectRandomCard();
+            MoveCamera();
+        }
         isFlipping = false;
     }
 

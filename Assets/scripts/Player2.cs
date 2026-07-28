@@ -73,6 +73,7 @@ public class Player2 : MonoBehaviour
 
     public void OnCardsRevealed()
     {
+        if (SpecialActionCardSystem.IsDetectiveExcluded(selectedCard)) return;
         if (isEliminated)
         {
             Debug.Log($"{name} は脱落しているため行動できません。");
@@ -91,6 +92,7 @@ public class Player2 : MonoBehaviour
             if (SelectedNumber != 0)
             {
                 Debug.Log($"Player2 はすでに怪盗の数字を決めています。（{SelectedNumber}）");
+                ShowStealNumber(SelectedNumber);
                 return;
             }
 
@@ -103,7 +105,7 @@ public class Player2 : MonoBehaviour
     {
         if (activeStealEffect != null)
         {
-            Debug.LogWarning("StealNumberEffect がすでに表示されているため、新しく作成しません。");
+            activeStealEffect.ShowNumber(number);
             return;
         }
 
@@ -258,6 +260,3 @@ public class Player2 : MonoBehaviour
 
 
 }
-
-
-

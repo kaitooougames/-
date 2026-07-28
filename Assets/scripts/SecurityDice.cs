@@ -195,7 +195,10 @@ public class SecurityDice : MonoBehaviour
         pendingDiceArrests.Add(() =>
         {
             if (ArrestHandler.Instance != null)
-                ArrestHandler.Instance.ArrestFromExternalEffect(card);
+            {
+                bool handled = ArrestHandler.Instance.ArrestFromExternalEffect(card);
+                if (!handled) fallback?.Invoke();
+            }
             else
                 fallback?.Invoke();
         });

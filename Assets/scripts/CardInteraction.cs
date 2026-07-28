@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections;
 
 public enum SpecialActionEffect
 {
@@ -18,7 +19,11 @@ public enum SpecialActionEffect
     SoloStage,
     BlackoutModule,
     TearGas,
-    Watchdog
+    Watchdog,
+    Detective,
+    Prison,
+    ElectricBaton,
+    AnalysisGlasses
 }
 
 public class CardInteraction : MonoBehaviour
@@ -94,6 +99,8 @@ public class CardInteraction : MonoBehaviour
     private bool draggingHand;
     private bool selectedHoverLocked;
     private bool handPoseInitialized;
+    private bool earlyRevealed;
+    private bool revealedOnTable;
     private Vector3 pointerDownPosition;
     private Vector3 lastPointerPosition;
     private const float HandDragThreshold = 12f;
@@ -165,7 +172,7 @@ public class CardInteraction : MonoBehaviour
 
     void OnMouseEnter()
     {
-        if (!isMoving && !hasMoved && isClickable)
+        if (!revealedOnTable && !isMoving && !hasMoved && isClickable)
         {
             // カードを少し浮かせるだけ
             transform.position = originalPosition + new Vector3(0, 0.2f, 0);
@@ -385,14 +392,21 @@ public class CardInteraction : MonoBehaviour
 
     public void FlipCard()
     {
+        revealedOnTable = true;
+        selectedHoverLocked = false;
+        transform.localScale = originalScale;
         Debug.Log("FlipCard() が呼ばれた: " + Time.frameCount);
         Debug.Log("isPhantomThief: " + isPhantomThief + ", selectedStealNumber: " + selectedStealNumber);
 
         // 選択不可の暗転は手札にある間だけ使用する。
         // 公開後の裏面まで暗くならないよう、反転開始時に見た目だけ通常へ戻す。
-        SetClickBrightness(1f);
-        targetRotation = Quaternion.Euler(transform.rotation.eulerAngles.x + 180, transform.rotation.eulerAngles.y + 180, transform.rotation.eulerAngles.z);
-        isFlipping = true;
+        if (!earlyRevealed)
+        {
+            SetClickBrightness(1f);
+            targetRotation = Quaternion.Euler(transform.rotation.eulerAngles.x + 180,
+                transform.rotation.eulerAngles.y + 180, transform.rotation.eulerAngles.z);
+            isFlipping = true;
+        }
 
         flippedCardCount++;
 
@@ -412,6 +426,30 @@ public class CardInteraction : MonoBehaviour
             }
         }
 
+    }
+
+    public void RevealBeforeAllCards(bool dimAfterReveal = false)
+    {
+        if (earlyRevealed) return;
+        revealedOnTable = true;
+        selectedHoverLocked = false;
+        transform.localScale = originalScale;
+        earlyRevealed = true;
+        targetRotation = Quaternion.Euler(transform.rotation.eulerAngles.x + 180,
+            transform.rotation.eulerAngles.y + 180, transform.rotation.eulerAngles.z);
+        isFlipping = true;
+        if (dimAfterReveal) SetClickBrightness(0.32f);
+    }
+
+    public IEnumerator BlinkAsDetectiveTarget(int blinkCount = 3)
+    {
+        for (int i = 0; i < blinkCount; i++)
+        {
+            SetClickBrightness(0.22f);
+            yield return new WaitForSeconds(0.16f);
+            SetClickBrightness(1f);
+            yield return new WaitForSeconds(0.16f);
+        }
     }
 
     private void SetClickBrightness(float brightness)
@@ -482,6 +520,8 @@ public class CardInteraction : MonoBehaviour
     {
         EffectManager.Instance.ClearStealNumber();
         selectedStealNumber = 0; // 🔹 宣言された数字をリセット
+        earlyRevealed = false;
+        revealedOnTable = false;
     }
 
 

@@ -12,6 +12,7 @@ public class ArrestHandler : MonoBehaviour
     public List<ArrestEffect> currentBattingEffects = new List<ArrestEffect>();
     private readonly List<int> successfulCagePlayerIds = new List<int>();
     private readonly Dictionary<CardInteraction, int> fieldCardOwners = new Dictionary<CardInteraction, int>();
+    private readonly HashSet<int> allCagePlayerIdsThisTurn = new HashSet<int>();
     private CardInteraction pendingFrameUpCard;
     private readonly List<CardInteraction> pendingFrameUpTargets = new List<CardInteraction>();
     public bool HasPendingFrameUpChoice => pendingFrameUpCard != null;
@@ -47,6 +48,7 @@ public class ArrestHandler : MonoBehaviour
         cages.Clear();
         successfulCagePlayerIds.Clear();
         fieldCardOwners.Clear();
+        allCagePlayerIdsThisTurn.Clear();
 
         // **各プレイヤーのカードを取得**
         Player player = FindObjectOfType<Player>();
@@ -56,37 +58,48 @@ public class ArrestHandler : MonoBehaviour
 
         if (player != null && !player.isEliminated && player.SelectedCard != null)
         {
+            if (SpecialActionCardSystem.IsDetectiveExcluded(player.SelectedCard))
+                goto Player2Card;
             player.SelectedCard.SelectedNumber = player.SelectedNumber;
             Debug.Log($"[DEBUG] {player.SelectedCard.name} の SelectedNumber = {player.SelectedCard.SelectedNumber}");
             fieldCards.Add(player.SelectedCard);
             fieldCardOwners[player.SelectedCard] = 0;
         }
 
+Player2Card:
         if (player2 != null && !player2.isEliminated && player2.SelectedCard != null)
         {
+            if (SpecialActionCardSystem.IsDetectiveExcluded(player2.SelectedCard))
+                goto Player3Card;
             player2.SelectedCard.SelectedNumber = player2.SelectedNumber;
             Debug.Log($"[DEBUG] {player2.SelectedCard.name} の SelectedNumber = {player2.SelectedCard.SelectedNumber}");
             fieldCards.Add(player2.SelectedCard);
             fieldCardOwners[player2.SelectedCard] = 1;
         }
 
+Player3Card:
         if (player3 != null && !player3.isEliminated && player3.SelectedCard != null)
         {
+            if (SpecialActionCardSystem.IsDetectiveExcluded(player3.SelectedCard))
+                goto Player4Card;
             player3.SelectedCard.SelectedNumber = player3.SelectedNumber;
             Debug.Log($"[DEBUG] {player3.SelectedCard.name} の SelectedNumber = {player3.SelectedCard.SelectedNumber}");
             fieldCards.Add(player3.SelectedCard);
             fieldCardOwners[player3.SelectedCard] = 2;
         }
 
+Player4Card:
         if (player4 != null && !player4.isEliminated && player4.SelectedCard != null)
         {
+            if (SpecialActionCardSystem.IsDetectiveExcluded(player4.SelectedCard))
+                goto CardsCollected;
             player4.SelectedCard.SelectedNumber = player4.SelectedNumber;
             Debug.Log($"[DEBUG] {player4.SelectedCard.name} の SelectedNumber = {player4.SelectedCard.SelectedNumber}");
             fieldCards.Add(player4.SelectedCard);
             fieldCardOwners[player4.SelectedCard] = 3;
         }
 
-
+CardsCollected:
         // **取得した場のカードをデバッグ表示**
         Debug.Log($"場のカードの数: {fieldCards.Count}");
         foreach (var card in fieldCards)
@@ -104,6 +117,8 @@ public class ArrestHandler : MonoBehaviour
             else if (card.isCage)
             {
                 cages.Add(card);
+                int cageOwner = FindPlayerIdByCard(card);
+                if (cageOwner >= 0) allCagePlayerIdsThisTurn.Add(cageOwner);
             }
         }
 
@@ -201,6 +216,8 @@ public class ArrestHandler : MonoBehaviour
         // 逮捕ペナルティそのものはArrest内で二重発動を防ぐ。
         phantomThieves = phantomThieves
             .OrderBy(t => t.SelectedNumber)
+            // 同じ宣言数なら、通電ステッキを檻が優先して逮捕する。
+            .ThenBy(t => t.specialEffect == SpecialActionEffect.ElectricBaton ? 0 : 1)
             // 同じ宣言数3で競合した場合だけ、独壇場ではない怪盗を先に檻へ割り当てる。
             .ThenBy(t => t.specialEffect == SpecialActionEffect.SoloStage ? 1 : 0)
             .ToList();
@@ -211,14 +228,32 @@ public class ArrestHandler : MonoBehaviour
             return;
         }
 
+        bool prisonPlayed = cages.Any(c => c.specialEffect == SpecialActionEffect.Prison);
         for (int i = 0; i < cages.Count && i < phantomThieves.Count; i++)
         {
             Debug.Log($"檻が {phantomThieves[i].name} を逮捕！");
             Arrest(phantomThieves[i]);
+            if (phantomThieves[i].specialEffect == SpecialActionEffect.ElectricBaton)
+                ApplyElectricBatonCageEffect();
+            if (prisonPlayed)
+            {
+                int thiefSeat = FindPlayerIdByCard(phantomThieves[i]);
+                SpecialActionCardSystem.Imprison(
+                    thiefSeat, HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1);
+            }
             int cagePlayerId = FindPlayerIdByCard(cages[i]);
             if (cagePlayerId >= 0 && !successfulCagePlayerIds.Contains(cagePlayerId))
                 successfulCagePlayerIds.Add(cagePlayerId);
         }
+    }
+
+    private void ApplyElectricBatonCageEffect()
+    {
+        int currentDay = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1;
+        // 番犬に檻効果を無効化されたカードも「この日に檻を出した」対象へ含める。
+        foreach (int cageSeat in allCagePlayerIdsThisTurn)
+            SpecialActionCardSystem.ExcludeFromNextDay(cageSeat, currentDay);
+        Debug.Log("<color=#72E6FF>【通電ステッキ発動】番犬による無効化を含め、檻を出した全プレイヤーを翌日除外。</color>");
     }
 
     private void ArrestThievesWithWatchdogs()
@@ -292,9 +327,9 @@ public class ArrestHandler : MonoBehaviour
         return successfulCagePlayerIds.ToArray();
     }
 
-    public void ArrestFromExternalEffect(CardInteraction card)
+    public bool ArrestFromExternalEffect(CardInteraction card)
     {
-        Arrest(card);
+        return Arrest(card);
     }
 
     private int FindPlayerIdByCard(CardInteraction card)
