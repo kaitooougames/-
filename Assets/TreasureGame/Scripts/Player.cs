@@ -95,8 +95,8 @@ public class Player : MonoBehaviour
         }
         GetDisplayPose(first, out Vector3 firstPosition, out Quaternion firstRotation);
         GetDisplayPose(second, out Vector3 secondPosition, out Quaternion secondRotation);
-        first.AnimateTo(firstPosition, firstRotation, duration);
-        second.AnimateTo(secondPosition, secondRotation, duration);
+        first.AnimateToKeepingCurrentFace(firstPosition, firstRotation, duration);
+        second.AnimateToKeepingCurrentFace(secondPosition, secondRotation, duration);
     }
 
     public void ShuffleDisplayedType(TreasureType type, float duration)

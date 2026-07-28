@@ -396,25 +396,45 @@ public class CameraController : MonoBehaviour
             }
             types.Add(treasure.Type);
         }
+        // 全対象者の並び替えを同時に開始する。CPUは画面を動かさず内部順だけ決める。
+        int cpuRearrangerCount = 0;
         foreach (KeyValuePair<int, HashSet<TreasureGame.TreasureType>> entry in rearrangeTypesByPlayer)
         {
-            if (entry.Key != 0)
-            {
-                appraiserMessage = $"Player{entry.Key + 1}が並び替え中です。";
-                yield return new WaitForSeconds(0.75f);
-                treasureController.ShuffleAppraiserDisplay(entry.Key, entry.Value);
-                continue;
-            }
-            if (!treasureController.BeginAppraiserRearrangement(entry.Key, entry.Value)) continue;
+            if (entry.Key == 0) continue;
+            treasureController.ShuffleAppraiserDisplay(entry.Key, entry.Value);
+            cpuRearrangerCount++;
+        }
+
+        bool playerOneRearranging = rearrangeTypesByPlayer.TryGetValue(
+            0, out HashSet<TreasureGame.TreasureType> playerOneTypes) &&
+            treasureController.BeginAppraiserRearrangement(0, playerOneTypes);
+        bool playerOneDone = !playerOneRearranging;
+        appraiserConfirmed = false;
+        if (playerOneRearranging)
+        {
             appraiserMessage = "鑑定士：同じ種類の宝を2枚ずつ選んで並び替えてください。";
             appraiserButtonLabel = "並び替え完了";
-            appraiserConfirmed = false;
             appraiserConfirmActive = true;
-            while (!appraiserConfirmed) yield return null;
-            appraiserConfirmActive = false;
-            treasureController.FinishAppraiserRearrangement();
-            yield return new WaitForSeconds(0.55f);
         }
+
+        float cpuFinishTime = Time.time + (cpuRearrangerCount > 0 ? 1.2f : 0f);
+        while (!playerOneDone || Time.time < cpuFinishTime)
+        {
+            if (!playerOneDone && appraiserConfirmed)
+            {
+                playerOneDone = true;
+                appraiserConfirmActive = false;
+                treasureController.FinishAppraiserRearrangement();
+                if (Time.time < cpuFinishTime)
+                    appraiserMessage = "ほかのPlayerが並び替え中です。";
+            }
+            else if (playerOneDone && Time.time < cpuFinishTime)
+            {
+                appraiserMessage = "ほかのPlayerが並び替え中です。";
+            }
+            yield return null;
+        }
+        appraiserConfirmActive = false;
         appraiserMessage = "全員の並び替えが完了しました。再展示します。";
         yield return StartCoroutine(treasureController.RedisplayAppraisedTreasures(revealedSet));
         appraiserMessage = "";

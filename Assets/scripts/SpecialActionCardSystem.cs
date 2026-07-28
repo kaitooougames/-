@@ -20,6 +20,7 @@ public static class SpecialActionCardSystem
     private static bool soloStageCreated;
     private static bool watchdogCreated;
     private static bool advanceNoticeCreated;
+    public static bool AppraiserAnalysisTestMode { get; private set; }
 
     public static void ResetSession()
     {
@@ -27,6 +28,7 @@ public static class SpecialActionCardSystem
         soloStageCreated = false;
         watchdogCreated = false;
         advanceNoticeCreated = false;
+        AppraiserAnalysisTestMode = false;
         exhibitOnlyNextTurn.Clear();
         detectiveExcludedCards.Clear();
         imprisonedUntilEndOfDay.Clear();
@@ -116,6 +118,41 @@ public static class SpecialActionCardSystem
         handManager.RefreshActionHandLayout();
         handManager.RefreshPlayerOneCardAvailability();
         Debug.Log("【テスト配布】Player1に実装済み特殊行動カード全種類を配布しました。");
+    }
+
+    public static void StartAppraiserAnalysisTest(HandManager handManager)
+    {
+        if (handManager == null) return;
+        AppraiserAnalysisTestMode = true;
+        for (int seat = 0; seat < 4; seat++)
+        {
+            bool active = seat == 0 ||
+                (seat == 1 && (handManager.ActionPlayerCount == 2 || handManager.ActionPlayerCount == 4)) ||
+                (seat >= 2 && handManager.ActionPlayerCount >= 3);
+            if (!active) continue;
+            GrantSpecificCardToSeat(seat, SpecialActionEffect.Appraiser, handManager);
+            GrantSpecificCardToSeat(seat, SpecialActionEffect.AnalysisGlasses, handManager);
+            GrantSpecificCardToSeat(seat, SpecialActionEffect.LargeTruck, handManager);
+        }
+        handManager.RefreshActionHandLayout();
+        handManager.RefreshPlayerOneCardAvailability();
+        Debug.Log("【専用テスト】分析メガネ＋鑑定士＋大型トラックを配布しました。");
+    }
+
+    private static void GrantSpecificCardToSeat(int seat, SpecialActionEffect effect,
+        HandManager handManager)
+    {
+        List<CardInteraction> ownerCards = GetCards(seat);
+        if (ownerCards == null || !TryGetTemplates(seat, ownerCards,
+                out CardInteraction exhibitTemplate, out CardInteraction thiefTemplate)) return;
+        CardInteraction card = CreateCard(IsThiefEffect(effect) ? thiefTemplate : exhibitTemplate,
+            effect, seat);
+        ownerCards.Add(card);
+        if (seat == 0)
+        {
+            handManager.cards.Add(card);
+            card.SetHandManager(handManager);
+        }
     }
 
     public static void MarkDetectiveExcluded(CardInteraction card)

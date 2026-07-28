@@ -319,6 +319,22 @@ public class HandManager : MonoBehaviour
         DrawPlayerCounts();
         DrawDayCounter();
         DrawAllSpecialCardsTestButton(style);
+        DrawAppraiserAnalysisTestButton(style);
+    }
+
+    private void DrawAppraiserAnalysisTestButton(GUIStyle style)
+    {
+        if (!showAllSpecialCardsButton) return;
+        float width = 245f * uiScale;
+        float height = 44f * uiScale;
+        Rect rect = new Rect(
+            allSpecialCardsButtonOffset.x,
+            allSpecialCardsButtonOffset.y + height + 10f,
+            width, height);
+        GUI.enabled = !cardSelected && !gameFinished;
+        if (GUI.Button(rect, "テスト：分析＋鑑定＋大型トラック", style))
+            SpecialActionCardSystem.StartAppraiserAnalysisTest(this);
+        GUI.enabled = true;
     }
 
     private void DrawAllSpecialCardsTestButton(GUIStyle style)

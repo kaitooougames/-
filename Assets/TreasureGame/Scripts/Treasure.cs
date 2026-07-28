@@ -287,7 +287,14 @@ public class Treasure : MonoBehaviour
     public void AnimateTo(Vector3 targetPosition, Quaternion targetRotation, float duration)
     {
         StopAllCoroutines();
-        StartCoroutine(AnimateRoutine(targetPosition, targetRotation, duration));
+        StartCoroutine(AnimateRoutine(targetPosition, targetRotation, duration, false));
+    }
+
+    public void AnimateToKeepingCurrentFace(Vector3 targetPosition,
+        Quaternion targetRotation, float duration)
+    {
+        StopAllCoroutines();
+        StartCoroutine(AnimateRoutine(targetPosition, targetRotation, duration, true));
     }
 
     public void AnimateFlipToFaceUp(float duration)
@@ -347,13 +354,17 @@ public class Treasure : MonoBehaviour
         faceUp = false;
     }
 
-    private IEnumerator AnimateRoutine(Vector3 targetPosition, Quaternion targetRotation, float duration)
+    private IEnumerator AnimateRoutine(Vector3 targetPosition, Quaternion targetRotation,
+        float duration, bool keepCurrentFace)
     {
         Vector3 startPosition = transform.position;
         Quaternion startRotation = transform.rotation;
         layoutPosition = targetPosition;
         layoutRotation = targetRotation;
-        Quaternion displayedTargetRotation = DisplayedRotation(targetRotation);
+        Quaternion displayedTargetRotation = keepCurrentFace && faceUp &&
+            location == TreasureLocation.Display
+            ? targetRotation * Quaternion.AngleAxis(-180f, Vector3.forward)
+            : DisplayedRotation(targetRotation);
         float elapsed = 0f;
         while (elapsed < duration)
         {
