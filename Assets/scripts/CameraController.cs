@@ -285,8 +285,13 @@ public class CameraController : MonoBehaviour
             yield return new WaitForSeconds(0.35f);
         securityDice?.ResolvePendingDiceArrests();
         // 警備サイコロで濡れ衣が発動した場合も、移し替え先の選択完了を待つ。
+        bool frameUpChoiceShown = ArrestHandler.Instance != null &&
+                                  ArrestHandler.Instance.HasPendingFrameUpChoice;
         while (ArrestHandler.Instance != null && ArrestHandler.Instance.HasPendingFrameUpChoice)
             yield return null;
+        // 移し替え先の逮捕エフェクトを確認してから、手札回収・次ターン処理へ進む。
+        if (frameUpChoiceShown)
+            yield return new WaitForSeconds(1.25f);
 
         // サイコロと檻のどちらかで逮捕された怪盗は、ここで除外される。
         yield return StartCoroutine(RunTreasureRobberiesFromActionCards());
