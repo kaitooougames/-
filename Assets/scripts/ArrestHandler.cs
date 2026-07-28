@@ -107,6 +107,24 @@ public class ArrestHandler : MonoBehaviour
             }
         }
 
+        List<CardInteraction> watchdogs =
+            cages.Where(c => c.specialEffect == SpecialActionEffect.Watchdog).ToList();
+        if (watchdogs.Count > 0)
+        {
+            foreach (CardInteraction disabledCage in cages.Where(c =>
+                         c.specialEffect != SpecialActionEffect.Watchdog))
+            {
+                Debug.Log($"【番犬】{disabledCage.name}の檻効果を無効化");
+                if (arrestEffectPrefab != null)
+                {
+                    ArrestEffect effect = Instantiate(
+                        arrestEffectPrefab, disabledCage.transform.position, Quaternion.identity);
+                    effect.ShowCageDisabled();
+                }
+            }
+            cages = watchdogs;
+        }
+
         // **怪盗と檻の数をデバッグ表示**
         Debug.Log($"怪盗の数: {phantomThieves.Count}, 檻の数: {cages.Count}");
         foreach (var thief in phantomThieves)
@@ -187,6 +205,12 @@ public class ArrestHandler : MonoBehaviour
             .ThenBy(t => t.specialEffect == SpecialActionEffect.SoloStage ? 1 : 0)
             .ToList();
 
+        if (cages.All(c => c.specialEffect == SpecialActionEffect.Watchdog))
+        {
+            ArrestThievesWithWatchdogs();
+            return;
+        }
+
         for (int i = 0; i < cages.Count && i < phantomThieves.Count; i++)
         {
             Debug.Log($"檻が {phantomThieves[i].name} を逮捕！");
@@ -194,6 +218,30 @@ public class ArrestHandler : MonoBehaviour
             int cagePlayerId = FindPlayerIdByCard(cages[i]);
             if (cagePlayerId >= 0 && !successfulCagePlayerIds.Contains(cagePlayerId))
                 successfulCagePlayerIds.Add(cagePlayerId);
+        }
+    }
+
+    private void ArrestThievesWithWatchdogs()
+    {
+        int thiefCount = phantomThieves.Count;
+        int watchdogCount = cages.Count;
+        int effectiveCages = Mathf.Max(watchdogCount, Mathf.Min(2, thiefCount));
+        if (effectiveCages > thiefCount)
+        {
+            Debug.Log($"【番犬競合】怪盗{thiefCount}人／番犬の檻{effectiveCages}個分：逮捕失敗");
+            HandleCageConflict();
+            return;
+        }
+
+        for (int i = 0; i < effectiveCages && i < thiefCount; i++)
+        {
+            CardInteraction watchdog = cages[i % watchdogCount];
+            CardInteraction thief = phantomThieves[i];
+            Debug.Log($"【番犬】{watchdog.name}が{thief.name}を逮捕！");
+            Arrest(thief);
+            int ownerId = FindPlayerIdByCard(watchdog);
+            if (ownerId >= 0)
+                successfulCagePlayerIds.Add(ownerId);
         }
     }
 

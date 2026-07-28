@@ -13,11 +13,13 @@ public static class SpecialActionCardSystem
         new Dictionary<int, CardInteraction>();
     private static bool initialCardsDealt;
     private static bool soloStageCreated;
+    private static bool watchdogCreated;
 
     public static void ResetSession()
     {
         initialCardsDealt = false;
         soloStageCreated = false;
+        watchdogCreated = false;
         exhibitOnlyNextTurn.Clear();
         handRotations.Clear();
         handPositions.Clear();
@@ -46,9 +48,34 @@ public static class SpecialActionCardSystem
         foreach (int treasureId in treasurePlayerIds)
         {
             int seat = FindActionSeat(treasureId, handManager);
-            if (seat >= 0) GrantCardsToSeat(seat, 1, handManager);
+            if (seat < 0) continue;
+            CardInteraction selected = GetSelectedCard(seat);
+            int rewardCount = selected != null &&
+                              selected.specialEffect == SpecialActionEffect.Watchdog ? 2 : 1;
+            GrantCardsToSeat(seat, rewardCount, handManager);
         }
         handManager.RefreshActionHandLayout();
+    }
+
+    private static CardInteraction GetSelectedCard(int seat)
+    {
+        if (seat == 0)
+        {
+            Player p = Object.FindFirstObjectByType<Player>(FindObjectsInactive.Include);
+            return p != null ? p.SelectedCard : null;
+        }
+        if (seat == 1)
+        {
+            Player2 p = Object.FindFirstObjectByType<Player2>(FindObjectsInactive.Include);
+            return p != null ? p.SelectedCard : null;
+        }
+        if (seat == 2)
+        {
+            Player3 p = Object.FindFirstObjectByType<Player3>(FindObjectsInactive.Include);
+            return p != null ? p.SelectedCard : null;
+        }
+        Player4 p4 = Object.FindFirstObjectByType<Player4>(FindObjectsInactive.Include);
+        return p4 != null ? p4.SelectedCard : null;
     }
 
     public static void GrantAllSpecialCardsToPlayerOne(HandManager handManager)
@@ -60,14 +87,16 @@ public static class SpecialActionCardSystem
                 out CardInteraction thiefTemplate))
             return;
 
-        for (int value = 1; value <= (int)SpecialActionEffect.TearGas; value++)
+        for (int value = 1; value <= (int)SpecialActionEffect.Watchdog; value++)
         {
             SpecialActionEffect effect = (SpecialActionEffect)value;
             if (effect == SpecialActionEffect.SoloStage && soloStageCreated) continue;
+            if (effect == SpecialActionEffect.Watchdog && watchdogCreated) continue;
             bool needsThiefTemplate = IsThiefEffect(effect);
             CardInteraction card = CreateCard(
                 needsThiefTemplate ? thiefTemplate : exhibitTemplate, effect, 0);
             if (effect == SpecialActionEffect.SoloStage) soloStageCreated = true;
+            if (effect == SpecialActionEffect.Watchdog) watchdogCreated = true;
             ownerCards.Add(card);
             handManager.cards.Add(card);
             card.SetHandManager(handManager);
@@ -142,6 +171,7 @@ public static class SpecialActionCardSystem
             CardInteraction template = needsThiefTemplate ? thiefTemplate : exhibitTemplate;
             CardInteraction card = CreateCard(template, effect, seat);
             if (effect == SpecialActionEffect.SoloStage) soloStageCreated = true;
+            if (effect == SpecialActionEffect.Watchdog) watchdogCreated = true;
             ownerCards.Add(card);
             if (seat == 0)
             {
@@ -157,9 +187,10 @@ public static class SpecialActionCardSystem
         SpecialActionEffect effect;
         do
         {
-            effect = (SpecialActionEffect)Random.Range(1, (int)SpecialActionEffect.TearGas + 1);
+            effect = (SpecialActionEffect)Random.Range(1, (int)SpecialActionEffect.Watchdog + 1);
         }
-        while (effect == SpecialActionEffect.SoloStage && soloStageCreated);
+        while ((effect == SpecialActionEffect.SoloStage && soloStageCreated) ||
+               (effect == SpecialActionEffect.Watchdog && watchdogCreated));
         return effect;
     }
 
@@ -211,7 +242,7 @@ public static class SpecialActionCardSystem
         CardInteraction card = clone.GetComponent<CardInteraction>();
         card.specialEffect = effect;
         // 怪盗系で展示効果も持つのは変装マスクだけ。
-        card.isExhibit = !IsThiefEffect(effect) ||
+        card.isExhibit = (!IsThiefEffect(effect) && effect != SpecialActionEffect.Watchdog) ||
                          effect == SpecialActionEffect.DisguiseMask;
         card.isPhantomThief = effect == SpecialActionEffect.DisguiseMask ||
                               effect == SpecialActionEffect.WireBelt ||
@@ -220,7 +251,8 @@ public static class SpecialActionCardSystem
                               effect == SpecialActionEffect.SoloStage ||
                               effect == SpecialActionEffect.BlackoutModule ||
                               effect == SpecialActionEffect.TearGas;
-        card.isCage = effect == SpecialActionEffect.TransportVehicle;
+        card.isCage = effect == SpecialActionEffect.TransportVehicle ||
+                      effect == SpecialActionEffect.Watchdog;
         card.InitializeHandPose(handPositions[seat], handRotations[seat]);
 
         string imageName = effect == SpecialActionEffect.Truck ? "トラック" :
@@ -237,6 +269,7 @@ public static class SpecialActionCardSystem
             effect == SpecialActionEffect.FrameUp ? "濡れ衣" :
             effect == SpecialActionEffect.SoloStage ? "独擅場" :
             effect == SpecialActionEffect.BlackoutModule ? "停電モジュール" : "催涙スプレー";
+        if (effect == SpecialActionEffect.Watchdog) imageName = "番犬";
         clone.name = $"特殊_{imageName}";
         Texture2D texture = Resources.Load<Texture2D>($"SpecialActionCards/{imageName}");
         Renderer renderer = clone.GetComponentInChildren<Renderer>();

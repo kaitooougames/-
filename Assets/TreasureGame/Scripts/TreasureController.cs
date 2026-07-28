@@ -367,7 +367,7 @@ public class TreasureController : MonoBehaviour
         queuedArrestRewardPlayerIds.Clear();
         if (playerIds == null) return;
         foreach (int id in playerIds)
-            if (ValidPlayer(id) && !queuedArrestRewardPlayerIds.Contains(id))
+            if (ValidPlayer(id))
                 queuedArrestRewardPlayerIds.Add(id);
         Debug.Log($"【檻の逮捕報酬】{queuedArrestRewardPlayerIds.Count}人が怪盗展示後に1枚展示します。");
     }
@@ -698,13 +698,19 @@ public class TreasureController : MonoBehaviour
             return;
         }
 
-        int[] rewardPlayers = queuedArrestRewardPlayerIds.ToArray();
+        var rewardCounts = new Dictionary<int, int>();
+        foreach (int playerId in queuedArrestRewardPlayerIds)
+            rewardCounts[playerId] = rewardCounts.TryGetValue(playerId, out int count) ? count + 1 : 1;
+        int[] rewardPlayers = new List<int>(rewardCounts.Keys).ToArray();
+        int[] displayCounts = new int[rewardPlayers.Length];
+        for (int i = 0; i < rewardPlayers.Length; i++)
+            displayCounts[i] = rewardCounts[rewardPlayers[i]];
         queuedArrestRewardPlayerIds.Clear();
         endTurnAfterCurrentDisplay = true;
         arrestRewardDisplayActive = true;
         string rewardNames = string.Join("・", System.Array.ConvertAll(rewardPlayers, id => $"Player{id + 1}"));
         Debug.Log($"<color=#FFD966>【檻の逮捕報酬により展示】{rewardNames}が宝を1枚展示します。</color>");
-        BeginDisplayPhase(rewardPlayers);
+        BeginDisplayPhase(rewardPlayers, displayCounts);
         if (Phase == TreasurePhase.Waiting)
         {
             endTurnAfterCurrentDisplay = false;

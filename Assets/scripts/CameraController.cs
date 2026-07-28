@@ -399,6 +399,15 @@ public class CameraController : MonoBehaviour
 
     private int[] DetermineSuccessfulCageRewardPlayers()
     {
+        if (ArrestHandler.Instance != null)
+        {
+            int[] seats = ArrestHandler.Instance.GetSuccessfulCagePlayerIds();
+            int[] result = new int[seats.Length];
+            for (int i = 0; i < seats.Length; i++)
+                result[i] = ToTreasurePlayerId(seats[i]);
+            return result;
+        }
+
         var cagePlayers = new List<int>();
         int thiefCount = 0;
         CountActionForCageReward(ToTreasurePlayerId(0), Player != null ? Player.SelectedCard : null,

@@ -17,7 +17,8 @@ public enum SpecialActionEffect
     FrameUp,
     SoloStage,
     BlackoutModule,
-    TearGas
+    TearGas,
+    Watchdog
 }
 
 public class CardInteraction : MonoBehaviour

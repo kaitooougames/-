@@ -30,7 +30,15 @@ public class ArrestEffect : MonoBehaviour
         textMesh.color = new Color(0.22f, 0.28f, 0.93f); // 青
 
         StartCoroutine(EffectAnimation());
-       
+
+    }
+
+    public void ShowCageDisabled()
+    {
+        textMesh.gameObject.SetActive(false);
+        textMesh.text = "BLOCKED!";
+        textMesh.color = new Color(1f, 0.28f, 0.08f);
+        StartCoroutine(EffectAnimation());
     }
 
     private void ShowEffect(string message)
