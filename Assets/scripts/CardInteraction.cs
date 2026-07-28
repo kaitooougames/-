@@ -23,7 +23,10 @@ public enum SpecialActionEffect
     Detective,
     Prison,
     ElectricBaton,
-    AnalysisGlasses
+    AnalysisGlasses,
+    Appraiser,
+    HoneyTrap,
+    AdvanceNotice
 }
 
 public class CardInteraction : MonoBehaviour
@@ -79,6 +82,7 @@ public class CardInteraction : MonoBehaviour
     public bool AllowsDeclaredNumber(int number)
     {
         if (specialEffect == SpecialActionEffect.SoloStage) return number == 3;
+        if (specialEffect == SpecialActionEffect.AdvanceNotice) return number == 10;
         if (specialEffect == SpecialActionEffect.BlackoutModule) return number >= 1 && number <= 4;
         if (specialEffect == SpecialActionEffect.TearGas) return number >= 1 && number <= 3;
         return number >= 1 && number <= 6;
@@ -87,6 +91,7 @@ public class CardInteraction : MonoBehaviour
     public int RandomDeclaredNumber()
     {
         if (specialEffect == SpecialActionEffect.SoloStage) return 3;
+        if (specialEffect == SpecialActionEffect.AdvanceNotice) return 10;
         if (specialEffect == SpecialActionEffect.BlackoutModule) return Random.Range(1, 5);
         if (specialEffect == SpecialActionEffect.TearGas) return Random.Range(1, 4);
         return Random.Range(1, 7);
@@ -246,6 +251,12 @@ public class CardInteraction : MonoBehaviour
             {
                 selectedHoverLocked = true;
                 LockSelectedThiefScale();
+                if (specialEffect == SpecialActionEffect.AdvanceNotice)
+                {
+                    // 予告状は宣言数10固定なので数字選択を表示せず、そのまま確定する。
+                    OnNumberSelected(10);
+                    return;
+                }
                 ShowNumberSelection();
                 DisableClick(false);
             }

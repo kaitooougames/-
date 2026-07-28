@@ -78,6 +78,49 @@ public class Player : MonoBehaviour
         }
     }
 
+    public void SwapDisplayedTreasures(Treasure first, Treasure second, float duration)
+    {
+        if (first == null || second == null || first == second ||
+            first.Type != second.Type || !displayTypeSlots.ContainsKey(first) ||
+            !displayTypeSlots.ContainsKey(second)) return;
+        int firstSlot = displayTypeSlots[first];
+        displayTypeSlots[first] = displayTypeSlots[second];
+        displayTypeSlots[second] = firstSlot;
+        int firstListIndex = displayedTreasures.IndexOf(first);
+        int secondListIndex = displayedTreasures.IndexOf(second);
+        if (firstListIndex >= 0 && secondListIndex >= 0)
+        {
+            displayedTreasures[firstListIndex] = second;
+            displayedTreasures[secondListIndex] = first;
+        }
+        GetDisplayPose(first, out Vector3 firstPosition, out Quaternion firstRotation);
+        GetDisplayPose(second, out Vector3 secondPosition, out Quaternion secondRotation);
+        first.AnimateTo(firstPosition, firstRotation, duration);
+        second.AnimateTo(secondPosition, secondRotation, duration);
+    }
+
+    public void ShuffleDisplayedType(TreasureType type, float duration)
+    {
+        var cards = displayedTreasures.FindAll(card => card != null && card.Type == type);
+        for (int i = cards.Count - 1; i > 0; i--)
+        {
+            int other = Random.Range(0, i + 1);
+            Treasure temporary = cards[i];
+            cards[i] = cards[other];
+            cards[other] = temporary;
+        }
+        var typeIndices = new List<int>();
+        for (int i = 0; i < displayedTreasures.Count; i++)
+            if (displayedTreasures[i] != null && displayedTreasures[i].Type == type)
+                typeIndices.Add(i);
+        for (int i = 0; i < cards.Count; i++)
+        {
+            displayedTreasures[typeIndices[i]] = cards[i];
+            displayTypeSlots[cards[i]] = i;
+        }
+        // 座標はここでは動かさない。全員の並び替え完了後、展示場外から一斉再展示する。
+    }
+
     public void SortHandForLayout()
     {
         stock.Sort(CompareTreasure);

@@ -9,6 +9,7 @@ public class SecurityDice : MonoBehaviour
     private int rolledNumber; // 出目
     private int blackoutSkipsRemaining;
     private readonly List<System.Action> pendingDiceArrests = new List<System.Action>();
+    public int PendingDiceArrestCount => pendingDiceArrests.Count;
     public DiceEffectController diceEffectController;
 
     private Player player;
@@ -117,7 +118,7 @@ public class SecurityDice : MonoBehaviour
                 if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
                 {
                     Debug.Log($"{player.name} の怪盗が逮捕されました！");
-                    ArrestBySecurityDice(player.SelectedCard, player.ShowArrestEffect);
+                    ArrestBySecurityDice(player.SelectedCard, () => player.ShowArrestEffect(true));
                 }
                 else
                 {
@@ -138,7 +139,7 @@ public class SecurityDice : MonoBehaviour
                 if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
                 {
                     Debug.Log($"{player2.name} の怪盗が逮捕されました！");
-                    ArrestBySecurityDice(player2.SelectedCard, player2.ShowArrestEffect);
+                    ArrestBySecurityDice(player2.SelectedCard, () => player2.ShowArrestEffect(true));
                 }
                 else
                 {
@@ -159,7 +160,7 @@ public class SecurityDice : MonoBehaviour
                 if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
                 {
                     Debug.Log($"{player3.name} の怪盗が逮捕されました！");
-                    ArrestBySecurityDice(player3.SelectedCard, player3.ShowArrestEffect);
+                    ArrestBySecurityDice(player3.SelectedCard, () => player3.ShowArrestEffect(true));
                 }
                 else
                 {
@@ -180,7 +181,7 @@ public class SecurityDice : MonoBehaviour
                 if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
                 {
                     Debug.Log($"{player4.name} の怪盗が逮捕されました！");
-                    ArrestBySecurityDice(player4.SelectedCard, player4.ShowArrestEffect);
+                    ArrestBySecurityDice(player4.SelectedCard, () => player4.ShowArrestEffect(true));
                 }
                 else
                 {
@@ -196,7 +197,7 @@ public class SecurityDice : MonoBehaviour
         {
             if (ArrestHandler.Instance != null)
             {
-                bool handled = ArrestHandler.Instance.ArrestFromExternalEffect(card);
+                bool handled = ArrestHandler.Instance.ArrestFromExternalEffect(card, true);
                 if (!handled) fallback?.Invoke();
             }
             else

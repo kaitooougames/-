@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace TreasureGame
@@ -36,6 +37,10 @@ public class TreasureController : MonoBehaviour
     private Player analysisRobber;
     private int requiredAnalysisCount;
     private bool analysisResolving;
+    private bool appraiserRearrangeActive;
+    private Player appraiserRearrangePlayer;
+    private readonly HashSet<TreasureType> appraiserRearrangeTypes = new HashSet<TreasureType>();
+    private Treasure appraiserFirstSelection;
     private readonly HashSet<Treasure> treasuresInTransit = new HashSet<Treasure>();
     private readonly HashSet<Player> blockedFromWinningThisTurn = new HashSet<Player>();
     private readonly HashSet<int> eliminatedPlayerIds = new HashSet<int>();
@@ -177,6 +182,101 @@ public class TreasureController : MonoBehaviour
         }
         if (hiddenCount > 0)
             Debug.Log($"<color=#B0B0B0>【真贋確認終了】Player{playerId + 1}の展示品を裏向きへ戻します。</color>");
+    }
+
+    public List<Treasure> RevealDisplayedTypeExceptPlayer(int excludedPlayerId, TreasureType type)
+    {
+        var revealed = new List<Treasure>();
+        for (int i = 0; i < playerCount; i++)
+        {
+            if (i == excludedPlayerId) continue;
+            foreach (Treasure card in players[i].DisplayedTreasures)
+            {
+                if (card == null || card.Type != type) continue;
+                if (!card.IsFaceUp) card.AnimateFlipToFaceUp(victoryFlipDuration);
+                revealed.Add(card);
+            }
+        }
+        Debug.Log($"<color=#FFD966>【鑑定士】P{excludedPlayerId + 1}以外の{type}を{revealed.Count}枚公開。</color>");
+        return revealed;
+    }
+
+    public void HideRevealedTreasures(IEnumerable<Treasure> cards)
+    {
+        if (cards == null) return;
+        foreach (Treasure card in cards)
+            if (card != null && card.IsFaceUp)
+                card.AnimateFlipToFaceDown(victoryFlipDuration);
+    }
+
+    public bool BeginAppraiserRearrangement(int playerId, IEnumerable<TreasureType> types)
+    {
+        if (!ValidPlayer(playerId) || types == null) return false;
+        appraiserRearrangeTypes.Clear();
+        foreach (TreasureType type in types) appraiserRearrangeTypes.Add(type);
+        appraiserRearrangePlayer = players[playerId];
+        appraiserFirstSelection = null;
+        appraiserRearrangeActive = appraiserRearrangeTypes.Count > 0 &&
+            appraiserRearrangePlayer.DisplayedTreasures.Any(card =>
+                card != null && appraiserRearrangeTypes.Contains(card.Type));
+        if (!appraiserRearrangeActive) return false;
+        foreach (Treasure card in appraiserRearrangePlayer.DisplayedTreasures)
+            if (card != null && appraiserRearrangeTypes.Contains(card.Type))
+                card.AnimateFlipToFaceUp(victoryFlipDuration);
+        RefreshInteraction();
+        return true;
+    }
+
+    public void FinishAppraiserRearrangement()
+    {
+        if (!appraiserRearrangeActive) return;
+        appraiserRearrangeActive = false;
+        appraiserRearrangePlayer = null;
+        appraiserRearrangeTypes.Clear();
+        appraiserFirstSelection = null;
+        RefreshInteraction();
+    }
+
+    public IEnumerator RedisplayAppraisedTreasures(IEnumerable<Treasure> cards)
+    {
+        if (cards == null) yield break;
+        var targets = new List<Treasure>();
+        foreach (Treasure card in cards)
+            if (card != null && !targets.Contains(card)) targets.Add(card);
+        if (targets.Count == 0) yield break;
+
+        Phase = TreasurePhase.Displaying;
+        RefreshInteraction();
+        // 並び替え結果が見えないよう、まず現在位置から全カードを展示場外へ退避する。
+        foreach (Treasure card in targets)
+        {
+            card.Owner.GetDisplayPose(card, out _, out Quaternion rotation);
+            Vector3 exit = card.transform.position +
+                           rotation * Vector3.forward * (displaySlideDistance * 3f);
+            card.AnimateTo(exit, rotation, moveDuration);
+        }
+        yield return new WaitForSeconds(moveDuration);
+
+        // 見えない位置で裏向きにし、新しい並び順の入口へ移してから一斉再展示する。
+        foreach (Treasure card in targets)
+        {
+            card.SetVisibleToLocalPlayer(false);
+            card.SetFaceUp(false);
+            card.Owner.GetDisplayPose(card, out Vector3 target, out Quaternion rotation);
+            card.MoveTo(DisplayEntrance(target, rotation), rotation);
+            card.SetVisibleToLocalPlayer(true);
+            card.AnimateTo(target, rotation, moveDuration);
+        }
+        yield return new WaitForSeconds(moveDuration);
+        Phase = TreasurePhase.Waiting;
+        RefreshInteraction();
+    }
+
+    public void ShuffleAppraiserDisplay(int playerId, IEnumerable<TreasureType> types)
+    {
+        if (!ValidPlayer(playerId) || types == null) return;
+        foreach (TreasureType type in types)
+            players[playerId].ShuffleDisplayedType(type, moveDuration);
     }
 
     public void TestRevealAllDisplayedTreasures()
@@ -412,6 +512,23 @@ public class TreasureController : MonoBehaviour
     public void HandleTreasureClick(Treasure card)
     {
         if (!CanInteract(card)) return;
+        if (appraiserRearrangeActive)
+        {
+            if (appraiserFirstSelection == null)
+            {
+                appraiserFirstSelection = card;
+                card.SetForcedDim(false);
+            }
+            else
+            {
+                if (appraiserFirstSelection.Type == card.Type)
+                    appraiserRearrangePlayer.SwapDisplayedTreasures(
+                        appraiserFirstSelection, card, moveDuration);
+                appraiserFirstSelection = null;
+            }
+            RefreshInteraction();
+            return;
+        }
         if (FreeInteractionMode)
         {
             if (card.Location == TreasureLocation.Hand) StartCoroutine(FreeDisplay(card));
@@ -460,6 +577,10 @@ public class TreasureController : MonoBehaviour
     public bool CanInteract(Treasure card)
     {
         if (card == null) return false;
+        if (appraiserRearrangeActive)
+            return card.Owner == appraiserRearrangePlayer &&
+                   card.Location == TreasureLocation.Display &&
+                   appraiserRearrangeTypes.Contains(card.Type);
         if (FreeInteractionMode) return !freeMoveInProgress;
         if (Phase == TreasurePhase.SelectingDisplays)
             return card.Location == TreasureLocation.Hand && displayPlayers.Contains(card.Owner)

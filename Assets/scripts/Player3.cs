@@ -113,7 +113,7 @@ public class Player3 : MonoBehaviour
         activeStealEffect.ShowNumber(number);
     }
     
-    public void ShowArrestEffect()
+    public void ShowArrestEffect(bool immediate = false)
     {
         if (isEliminated)
         {
@@ -136,7 +136,8 @@ public class Player3 : MonoBehaviour
         if (arrestEffectPrefab != null)
         {
             activeArrestEffect = Instantiate(arrestEffectPrefab, transform.position + new Vector3(-1.5f, 0.1f, -0.5f), Quaternion.identity);
-            activeArrestEffect.ShowArrest();
+            if (immediate) activeArrestEffect.ShowArrestForSecurityDice();
+            else activeArrestEffect.ShowArrest();
         }
       
     }

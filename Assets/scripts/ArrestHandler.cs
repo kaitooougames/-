@@ -327,9 +327,9 @@ CardsCollected:
         return successfulCagePlayerIds.ToArray();
     }
 
-    public bool ArrestFromExternalEffect(CardInteraction card)
+    public bool ArrestFromExternalEffect(CardInteraction card, bool immediateEffect = false)
     {
-        return Arrest(card);
+        return Arrest(card, immediateEffect);
     }
 
     private int FindPlayerIdByCard(CardInteraction card)
@@ -339,7 +339,7 @@ CardsCollected:
             : -1;
     }
 
-    private bool Arrest(CardInteraction card)
+    private bool Arrest(CardInteraction card, bool immediateEffect = false)
     {
         if (card == null) return false;
         if (card.specialEffect == SpecialActionEffect.FrameUp && TryStartFrameUp(card))
@@ -351,7 +351,7 @@ CardsCollected:
         Player player = FindPlayerByCard(card);
         if (player != null && !player.HasBeenArrested)
         {
-            player.ShowArrestEffect();
+            player.ShowArrestEffect(immediateEffect);
             arrested = true;
         }
 
@@ -359,7 +359,7 @@ CardsCollected:
         Player2 player2 = FindPlayer2ByCard(card);
         if (player2 != null && !player2.HasBeenArrested)
         {
-            player2.ShowArrestEffect();
+            player2.ShowArrestEffect(immediateEffect);
             arrested = true;
         }
 
@@ -367,7 +367,7 @@ CardsCollected:
         Player3 player3 = FindPlayer3ByCard(card);
         if (player3 != null && !player3.HasBeenArrested)
         {
-            player3.ShowArrestEffect();
+            player3.ShowArrestEffect(immediateEffect);
             arrested = true;
         }
 
@@ -375,7 +375,7 @@ CardsCollected:
         Player4 player4 = FindPlayer4ByCard(card);
         if (player4 != null && !player4.HasBeenArrested)
         {
-            player4.ShowArrestEffect();
+            player4.ShowArrestEffect(immediateEffect);
             arrested = true;
         }
         return arrested;

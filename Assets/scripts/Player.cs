@@ -84,7 +84,7 @@ public class Player : MonoBehaviour
     }
 
     // 逮捕エフェクトの表示
-    public void ShowArrestEffect()
+    public void ShowArrestEffect(bool immediate = false)
     {
         // 既にペナルティが適用されていれば何もしない
         if (hasAppliedPenalty)
@@ -100,7 +100,8 @@ public class Player : MonoBehaviour
         if (arrestEffectPrefab != null)
         {
             activeArrestEffect = Instantiate(arrestEffectPrefab, transform.position + new Vector3(0, 0.1f, -1.55f), Quaternion.identity);
-            activeArrestEffect.ShowArrest();
+            if (immediate) activeArrestEffect.ShowArrestForSecurityDice();
+            else activeArrestEffect.ShowArrest();
         }
     }
 

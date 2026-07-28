@@ -34,6 +34,12 @@ public class CameraController : MonoBehaviour
     private string detectiveAnnouncement = "";
     private AudioSource detectiveAudioSource;
     private AudioClip detectiveWrongClip;
+    private bool appraiserTypeChoiceActive;
+    private int appraiserChosenType = -1;
+    private bool appraiserConfirmActive;
+    private bool appraiserConfirmed;
+    private string appraiserMessage = "";
+    private string appraiserButtonLabel = "把握OK";
     public bool PlayerDisplayViewActive => playerDisplayViewActive;
     public bool IsCameraMoving => isCameraMoving;
 
@@ -97,6 +103,8 @@ public class CameraController : MonoBehaviour
         // 行動カードを確認してカメラが通常位置へ戻ってから、お宝の展示を始める。
         BeginTreasureDisplaysFromActionCards();
         yield return StartCoroutine(WaitForTreasureDisplays());
+
+        yield return StartCoroutine(ResolveAppraisersBeforeSecurityDice());
 
         yield return new WaitForSeconds(1f);
         TriggerSecurityDice();
@@ -251,6 +259,7 @@ public class CameraController : MonoBehaviour
     {
         DrawPrisonRollMessage();
         DrawDetectiveAnnouncement();
+        DrawAppraiserControls();
         if (!detectiveChoiceActive) return;
         GUIStyle boxStyle = new GUIStyle(GUI.skin.box)
         {
@@ -274,6 +283,148 @@ public class CameraController : MonoBehaviour
                 break;
             }
         }
+    }
+
+    private void DrawAppraiserControls()
+    {
+        if (!appraiserTypeChoiceActive && !appraiserConfirmActive &&
+            string.IsNullOrEmpty(appraiserMessage)) return;
+        GUIStyle boxStyle = new GUIStyle(GUI.skin.box)
+        {
+            fontSize = 28, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter
+        };
+        GUIStyle buttonStyle = new GUIStyle(GUI.skin.button)
+        {
+            fontSize = 27, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter
+        };
+        GUI.Box(new Rect(Screen.width * 0.5f - 430f, 25f, 860f, 92f),
+            appraiserMessage, boxStyle);
+        if (appraiserTypeChoiceActive)
+        {
+            string[] labels = { "遺物", "宝石", "絵画" };
+            int[] values =
+            {
+                (int)TreasureGame.TreasureType.Relic,
+                (int)TreasureGame.TreasureType.Jewel,
+                (int)TreasureGame.TreasureType.Painting
+            };
+            float startX = Screen.width * 0.5f - 315f;
+            for (int i = 0; i < labels.Length; i++)
+                if (GUI.Button(new Rect(startX + i * 210f, 130f, 195f, 68f), labels[i], buttonStyle))
+                    appraiserChosenType = values[i];
+        }
+        if (appraiserConfirmActive &&
+            GUI.Button(new Rect(Screen.width * 0.5f - 150f, 130f, 300f, 68f),
+                appraiserButtonLabel, buttonStyle))
+            appraiserConfirmed = true;
+    }
+
+    private IEnumerator ResolveAppraisersBeforeSecurityDice()
+    {
+        TreasureGame.TreasureController treasureController =
+            FindFirstObjectByType<TreasureGame.TreasureController>();
+        if (treasureController == null) yield break;
+
+        var appraiserChoices = new List<KeyValuePair<int, TreasureGame.TreasureType>>();
+        for (int seat = 0; seat < 4; seat++)
+        {
+            CardInteraction card = GetSelectedActionCard(seat);
+            if (!IsActionSeatActive(seat) || card == null ||
+                card.specialEffect != SpecialActionEffect.Appraiser)
+                continue;
+
+            TreasureGame.TreasureType chosenType;
+            if (seat == 0)
+            {
+                appraiserChosenType = -1;
+                appraiserMessage = "鑑定士：公開する宝の種類を選んでください。";
+                appraiserTypeChoiceActive = true;
+                while (appraiserChosenType < 0) yield return null;
+                appraiserTypeChoiceActive = false;
+                chosenType = (TreasureGame.TreasureType)appraiserChosenType;
+            }
+            else
+            {
+                TreasureGame.TreasureType[] types =
+                {
+                    TreasureGame.TreasureType.Relic,
+                    TreasureGame.TreasureType.Jewel,
+                    TreasureGame.TreasureType.Painting
+                };
+                chosenType = types[Random.Range(0, types.Length)];
+            }
+
+            appraiserChoices.Add(
+                new KeyValuePair<int, TreasureGame.TreasureType>(seat, chosenType));
+        }
+
+        if (appraiserChoices.Count == 0) yield break;
+
+        // 全鑑定士の選択が終わってから、対象をまとめて一斉公開する。
+        var revealedSet = new HashSet<TreasureGame.Treasure>();
+        var choiceLabels = new List<string>();
+        foreach (KeyValuePair<int, TreasureGame.TreasureType> choice in appraiserChoices)
+        {
+            int treasurePlayerId = ToTreasurePlayerId(choice.Key);
+            foreach (TreasureGame.Treasure treasure in
+                     treasureController.RevealDisplayedTypeExceptPlayer(
+                         treasurePlayerId, choice.Value))
+                revealedSet.Add(treasure);
+            choiceLabels.Add($"P{choice.Key + 1}:{TreasureTypeLabel(choice.Value)}");
+        }
+
+        appraiserMessage = $"鑑定士を一斉公開中（{string.Join(" / ", choiceLabels)}）";
+        appraiserButtonLabel = "把握OK";
+        yield return new WaitForSeconds(0.8f);
+        appraiserConfirmed = false;
+        appraiserConfirmActive = true;
+        while (!appraiserConfirmed) yield return null;
+        appraiserConfirmActive = false;
+        treasureController.HideRevealedTreasures(revealedSet);
+        yield return new WaitForSeconds(0.55f);
+
+        // 公開対象になった各プレイヤーが、公開された種類だけを秘密裏に並び替える。
+        var rearrangeTypesByPlayer = new Dictionary<int, HashSet<TreasureGame.TreasureType>>();
+        foreach (TreasureGame.Treasure treasure in revealedSet)
+        {
+            if (treasure == null || treasure.Owner == null) continue;
+            int playerId = treasure.Owner.PlayerId;
+            if (!rearrangeTypesByPlayer.TryGetValue(playerId, out HashSet<TreasureGame.TreasureType> types))
+            {
+                types = new HashSet<TreasureGame.TreasureType>();
+                rearrangeTypesByPlayer.Add(playerId, types);
+            }
+            types.Add(treasure.Type);
+        }
+        foreach (KeyValuePair<int, HashSet<TreasureGame.TreasureType>> entry in rearrangeTypesByPlayer)
+        {
+            if (entry.Key != 0)
+            {
+                appraiserMessage = $"Player{entry.Key + 1}が並び替え中です。";
+                yield return new WaitForSeconds(0.75f);
+                treasureController.ShuffleAppraiserDisplay(entry.Key, entry.Value);
+                continue;
+            }
+            if (!treasureController.BeginAppraiserRearrangement(entry.Key, entry.Value)) continue;
+            appraiserMessage = "鑑定士：同じ種類の宝を2枚ずつ選んで並び替えてください。";
+            appraiserButtonLabel = "並び替え完了";
+            appraiserConfirmed = false;
+            appraiserConfirmActive = true;
+            while (!appraiserConfirmed) yield return null;
+            appraiserConfirmActive = false;
+            treasureController.FinishAppraiserRearrangement();
+            yield return new WaitForSeconds(0.55f);
+        }
+        appraiserMessage = "全員の並び替えが完了しました。再展示します。";
+        yield return StartCoroutine(treasureController.RedisplayAppraisedTreasures(revealedSet));
+        appraiserMessage = "";
+    }
+
+    private static string TreasureTypeLabel(TreasureGame.TreasureType type)
+    {
+        if (type == TreasureGame.TreasureType.Relic) return "遺物";
+        if (type == TreasureGame.TreasureType.Jewel) return "宝石";
+        return "絵画";
     }
 
     private void DrawDetectiveAnnouncement()
@@ -563,6 +714,8 @@ public class CameraController : MonoBehaviour
         // 出目が静止・表示された状態を少し見せてから逮捕判定へ進む。
         if (diceEffect != null)
             yield return new WaitForSeconds(0.35f);
+        bool hasPendingDiceArrest = securityDice != null &&
+                                    securityDice.PendingDiceArrestCount > 0;
         securityDice?.ResolvePendingDiceArrests();
         // 警備サイコロで濡れ衣が発動した場合も、移し替え先の選択完了を待つ。
         bool frameUpChoiceShown = ArrestHandler.Instance != null &&
@@ -572,6 +725,9 @@ public class CameraController : MonoBehaviour
         // 移し替え先の逮捕エフェクトを確認してから、手札回収・次ターン処理へ進む。
         if (frameUpChoiceShown)
             yield return new WaitForSeconds(1.25f);
+        else if (hasPendingDiceArrest)
+            // 少しためて表示する逮捕文字と落下演出を確認してから怪盗処理へ進む。
+            yield return new WaitForSeconds(0.85f);
 
         // サイコロと檻のどちらかで逮捕された怪盗は、ここで除外される。
         yield return StartCoroutine(RunTreasureRobberiesFromActionCards());

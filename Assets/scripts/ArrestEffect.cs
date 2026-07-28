@@ -21,7 +21,11 @@ public class ArrestEffect : MonoBehaviour
 
     public void ShowArrest()
     {
-        ShowEffect("Arrest!");
+        ShowEffect("Arrest!", 1f);
+    }
+    public void ShowArrestForSecurityDice()
+    {
+        ShowEffect("Arrest!", 0.35f);
     }
     public void ShowBatting()
     {
@@ -41,19 +45,18 @@ public class ArrestEffect : MonoBehaviour
         StartCoroutine(EffectAnimation());
     }
 
-    private void ShowEffect(string message)
+    private void ShowEffect(string message, float delay)
     {
         // **最初はテキストを非表示**
         textMesh.gameObject.SetActive(false);
 
         textMesh.text = message;
-        StartCoroutine(EffectAnimation());
+        StartCoroutine(EffectAnimation(delay));
     }
 
-    private IEnumerator EffectAnimation()
+    private IEnumerator EffectAnimation(float delay = 1f)
     {
-        // **1秒待機してから開始**
-        yield return new WaitForSeconds(1f);
+        if (delay > 0f) yield return new WaitForSeconds(delay);
 
         // **テキストを表示**
         textMesh.gameObject.SetActive(true);

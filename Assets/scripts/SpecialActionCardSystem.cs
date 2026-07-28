@@ -19,12 +19,14 @@ public static class SpecialActionCardSystem
     private static bool initialCardsDealt;
     private static bool soloStageCreated;
     private static bool watchdogCreated;
+    private static bool advanceNoticeCreated;
 
     public static void ResetSession()
     {
         initialCardsDealt = false;
         soloStageCreated = false;
         watchdogCreated = false;
+        advanceNoticeCreated = false;
         exhibitOnlyNextTurn.Clear();
         detectiveExcludedCards.Clear();
         imprisonedUntilEndOfDay.Clear();
@@ -95,16 +97,18 @@ public static class SpecialActionCardSystem
                 out CardInteraction thiefTemplate))
             return;
 
-        for (int value = 1; value <= (int)SpecialActionEffect.AnalysisGlasses; value++)
+        for (int value = 1; value <= (int)SpecialActionEffect.AdvanceNotice; value++)
         {
             SpecialActionEffect effect = (SpecialActionEffect)value;
             if (effect == SpecialActionEffect.SoloStage && soloStageCreated) continue;
             if (effect == SpecialActionEffect.Watchdog && watchdogCreated) continue;
+            if (effect == SpecialActionEffect.AdvanceNotice && advanceNoticeCreated) continue;
             bool needsThiefTemplate = IsThiefEffect(effect);
             CardInteraction card = CreateCard(
                 needsThiefTemplate ? thiefTemplate : exhibitTemplate, effect, 0);
             if (effect == SpecialActionEffect.SoloStage) soloStageCreated = true;
             if (effect == SpecialActionEffect.Watchdog) watchdogCreated = true;
+            if (effect == SpecialActionEffect.AdvanceNotice) advanceNoticeCreated = true;
             ownerCards.Add(card);
             handManager.cards.Add(card);
             card.SetHandManager(handManager);
@@ -249,6 +253,7 @@ public static class SpecialActionCardSystem
             CardInteraction card = CreateCard(template, effect, seat);
             if (effect == SpecialActionEffect.SoloStage) soloStageCreated = true;
             if (effect == SpecialActionEffect.Watchdog) watchdogCreated = true;
+            if (effect == SpecialActionEffect.AdvanceNotice) advanceNoticeCreated = true;
             ownerCards.Add(card);
             if (seat == 0)
             {
@@ -265,10 +270,11 @@ public static class SpecialActionCardSystem
         do
         {
             effect = (SpecialActionEffect)Random.Range(
-                1, (int)SpecialActionEffect.AnalysisGlasses + 1);
+                1, (int)SpecialActionEffect.AdvanceNotice + 1);
         }
         while ((effect == SpecialActionEffect.SoloStage && soloStageCreated) ||
-               (effect == SpecialActionEffect.Watchdog && watchdogCreated));
+               (effect == SpecialActionEffect.Watchdog && watchdogCreated) ||
+               (effect == SpecialActionEffect.AdvanceNotice && advanceNoticeCreated));
         return effect;
     }
 
@@ -282,7 +288,9 @@ public static class SpecialActionCardSystem
                effect == SpecialActionEffect.BlackoutModule ||
                effect == SpecialActionEffect.TearGas ||
                effect == SpecialActionEffect.ElectricBaton ||
-               effect == SpecialActionEffect.AnalysisGlasses;
+               effect == SpecialActionEffect.AnalysisGlasses ||
+               effect == SpecialActionEffect.HoneyTrap ||
+               effect == SpecialActionEffect.AdvanceNotice;
     }
 
     private static bool TryGetTemplates(int seat, List<CardInteraction> ownerCards,
@@ -334,7 +342,9 @@ public static class SpecialActionCardSystem
                               effect == SpecialActionEffect.BlackoutModule ||
                               effect == SpecialActionEffect.TearGas ||
                               effect == SpecialActionEffect.ElectricBaton ||
-                              effect == SpecialActionEffect.AnalysisGlasses;
+                              effect == SpecialActionEffect.AnalysisGlasses ||
+                              effect == SpecialActionEffect.HoneyTrap ||
+                              effect == SpecialActionEffect.AdvanceNotice;
         card.isCage = effect == SpecialActionEffect.TransportVehicle ||
                       effect == SpecialActionEffect.Watchdog ||
                       effect == SpecialActionEffect.Prison;
@@ -360,6 +370,9 @@ public static class SpecialActionCardSystem
         if (effect == SpecialActionEffect.ElectricBaton) imageName = "通電ステッキ";
         // macOS上の画像名は「ガ」がカ＋結合濁点のNFD形式で保存されている。
         if (effect == SpecialActionEffect.AnalysisGlasses) imageName = "分析メカ\u3099ネ";
+        if (effect == SpecialActionEffect.Appraiser) imageName = "鑑定士";
+        if (effect == SpecialActionEffect.HoneyTrap) imageName = "ハニートラップ";
+        if (effect == SpecialActionEffect.AdvanceNotice) imageName = "予告状";
         clone.name = $"特殊_{imageName}";
         Texture2D texture = Resources.Load<Texture2D>($"SpecialActionCards/{imageName}");
         if (texture == null)
