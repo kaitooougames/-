@@ -40,22 +40,26 @@ public class SecurityDice : MonoBehaviour
             if (IsParticipating(player4))
                 Debug.Log($"[DEBUG] {player4.name} - 選択カード: {player4.SelectedCard?.GetType().Name}, isPhantomThief: {player4.SelectedCard?.isPhantomThief}, HasBeenArrested: {player4.HasBeenArrested}");
 
-            if (!player.isEliminated && player.SelectedCard != null && player.SelectedCard.isPhantomThief && !player.HasBeenArrested)
+            if (!player.isEliminated && player.SelectedCard != null && player.SelectedCard.isPhantomThief &&
+                !SpecialActionCardSystem.IsAdvanceNoticeWaiting(player.SelectedCard) && !player.HasBeenArrested)
             {
                 return true; // 逮捕されていない怪盗がいる
             }
 
-            if (IsParticipating(player2) && !player2.isEliminated && player2.SelectedCard != null && player2.SelectedCard.isPhantomThief && !player2.HasBeenArrested)
+            if (IsParticipating(player2) && !player2.isEliminated && player2.SelectedCard != null && player2.SelectedCard.isPhantomThief &&
+                !SpecialActionCardSystem.IsAdvanceNoticeWaiting(player2.SelectedCard) && !player2.HasBeenArrested)
             {
                 return true; // 逮捕されていない怪盗がいる
             }
 
-            if (IsParticipating(player3) && !player3.isEliminated && player3.SelectedCard != null && player3.SelectedCard.isPhantomThief && !player3.HasBeenArrested)
+            if (IsParticipating(player3) && !player3.isEliminated && player3.SelectedCard != null && player3.SelectedCard.isPhantomThief &&
+                !SpecialActionCardSystem.IsAdvanceNoticeWaiting(player3.SelectedCard) && !player3.HasBeenArrested)
             {
                 return true; // 逮捕されていない怪盗がいる
             }
 
-            if (IsParticipating(player4) && !player4.isEliminated && player4.SelectedCard != null && player4.SelectedCard.isPhantomThief && !player4.HasBeenArrested)
+            if (IsParticipating(player4) && !player4.isEliminated && player4.SelectedCard != null && player4.SelectedCard.isPhantomThief &&
+                !SpecialActionCardSystem.IsAdvanceNoticeWaiting(player4.SelectedCard) && !player4.HasBeenArrested)
             {
                 return true; // 逮捕されていない怪盗がいる
             }
@@ -106,7 +110,9 @@ public class SecurityDice : MonoBehaviour
         // プレイヤーごとに処理を行う
         foreach (var player in players)
         {
-            if (player.SelectedCard != null && player.SelectedCard.isPhantomThief && player.HasBeenArrested==false)
+            if (player.SelectedCard != null && player.SelectedCard.isPhantomThief &&
+                !SpecialActionCardSystem.IsAdvanceNoticeWaiting(player.SelectedCard) &&
+                player.HasBeenArrested==false)
             {
                 int chosenNumber = player.SelectedCard.SelectedNumber;
                 Debug.Log($"{player.name} の怪盗が選んだ数: {chosenNumber}");
@@ -115,7 +121,9 @@ public class SecurityDice : MonoBehaviour
                                     rolledNumber <= 2;
                 bool tearGasSafe = player.SelectedCard.specialEffect == SpecialActionEffect.TearGas &&
                                    rolledNumber >= 2;
-                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
+                bool advanceNoticeSafe = player.SelectedCard.specialEffect == SpecialActionEffect.AdvanceNotice &&
+                                         rolledNumber >= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe && !advanceNoticeSafe)
                 {
                     Debug.Log($"{player.name} の怪盗が逮捕されました！");
                     ArrestBySecurityDice(player.SelectedCard, () => player.ShowArrestEffect(true));
@@ -127,7 +135,9 @@ public class SecurityDice : MonoBehaviour
             }
 
             // Player2の処理
-            if (IsParticipating(player2) && player2.SelectedCard != null && player2.SelectedCard.isPhantomThief && player2.HasBeenArrested == false)
+            if (IsParticipating(player2) && player2.SelectedCard != null && player2.SelectedCard.isPhantomThief &&
+                !SpecialActionCardSystem.IsAdvanceNoticeWaiting(player2.SelectedCard) &&
+                player2.HasBeenArrested == false)
             {
                 int chosenNumber = player2.SelectedCard.SelectedNumber;
                 Debug.Log($"{player2.name} の怪盗が選んだ数: {chosenNumber}");
@@ -136,7 +146,9 @@ public class SecurityDice : MonoBehaviour
                                     rolledNumber <= 2;
                 bool tearGasSafe = player2.SelectedCard.specialEffect == SpecialActionEffect.TearGas &&
                                    rolledNumber >= 2;
-                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
+                bool advanceNoticeSafe = player2.SelectedCard.specialEffect == SpecialActionEffect.AdvanceNotice &&
+                                         rolledNumber >= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe && !advanceNoticeSafe)
                 {
                     Debug.Log($"{player2.name} の怪盗が逮捕されました！");
                     ArrestBySecurityDice(player2.SelectedCard, () => player2.ShowArrestEffect(true));
@@ -148,7 +160,9 @@ public class SecurityDice : MonoBehaviour
             }
 
             // Player3の処理
-            if (IsParticipating(player3) && player3.SelectedCard != null && player3.SelectedCard.isPhantomThief && player3.HasBeenArrested == false)
+            if (IsParticipating(player3) && player3.SelectedCard != null && player3.SelectedCard.isPhantomThief &&
+                !SpecialActionCardSystem.IsAdvanceNoticeWaiting(player3.SelectedCard) &&
+                player3.HasBeenArrested == false)
             {
                 int chosenNumber = player3.SelectedCard.SelectedNumber;
                 Debug.Log($"{player3.name} の怪盗が選んだ数: {chosenNumber}");
@@ -157,7 +171,9 @@ public class SecurityDice : MonoBehaviour
                                     rolledNumber <= 2;
                 bool tearGasSafe = player3.SelectedCard.specialEffect == SpecialActionEffect.TearGas &&
                                    rolledNumber >= 2;
-                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
+                bool advanceNoticeSafe = player3.SelectedCard.specialEffect == SpecialActionEffect.AdvanceNotice &&
+                                         rolledNumber >= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe && !advanceNoticeSafe)
                 {
                     Debug.Log($"{player3.name} の怪盗が逮捕されました！");
                     ArrestBySecurityDice(player3.SelectedCard, () => player3.ShowArrestEffect(true));
@@ -169,7 +185,9 @@ public class SecurityDice : MonoBehaviour
             }
 
             // Player4の処理
-            if (IsParticipating(player4) && player4.SelectedCard != null && player4.SelectedCard.isPhantomThief && player4.HasBeenArrested == false)
+            if (IsParticipating(player4) && player4.SelectedCard != null && player4.SelectedCard.isPhantomThief &&
+                !SpecialActionCardSystem.IsAdvanceNoticeWaiting(player4.SelectedCard) &&
+                player4.HasBeenArrested == false)
             {
                 int chosenNumber = player4.SelectedCard.SelectedNumber;
                 Debug.Log($"{player4.name} の怪盗が選んだ数: {chosenNumber}");
@@ -178,7 +196,9 @@ public class SecurityDice : MonoBehaviour
                                     rolledNumber <= 2;
                 bool tearGasSafe = player4.SelectedCard.specialEffect == SpecialActionEffect.TearGas &&
                                    rolledNumber >= 2;
-                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe)
+                bool advanceNoticeSafe = player4.SelectedCard.specialEffect == SpecialActionEffect.AdvanceNotice &&
+                                         rolledNumber >= 2;
+                if (chosenNumber > rolledNumber && !wireBeltSafe && !tearGasSafe && !advanceNoticeSafe)
                 {
                     Debug.Log($"{player4.name} の怪盗が逮捕されました！");
                     ArrestBySecurityDice(player4.SelectedCard, () => player4.ShowArrestEffect(true));

@@ -110,7 +110,7 @@ CardsCollected:
         // **怪盗カードを分類**
         foreach (var card in fieldCards)
         {
-            if (card.isPhantomThief)
+            if (card.isPhantomThief && !SpecialActionCardSystem.IsAdvanceNoticeWaiting(card))
             {
                 phantomThieves.Add(card);
             }

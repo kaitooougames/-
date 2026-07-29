@@ -26,6 +26,11 @@ public class Player4 : MonoBehaviour
 
     public void SelectRandomCard()
     {
+        if (SpecialActionCardSystem.TryGetActiveAdvanceNotice(3, out CardInteraction notice))
+        {
+            RestoreAdvanceNotice(notice);
+            return;
+        }
         if (isEliminated)
         {
             Debug.Log($"{name} はすでに脱落しています。ペナルティ適用なし。");
@@ -58,6 +63,13 @@ public class Player4 : MonoBehaviour
 
         Vector3 player4Position = new Vector3(1, 0, 0);
         selectedCard.MoveTo(player4Position, 2.5f);
+    }
+
+    public void RestoreAdvanceNotice(CardInteraction card)
+    {
+        selectedCard = card;
+        SelectedNumber = 10;
+        card.SelectedNumber = 10;
     }
 
     private void OnEnable()
@@ -227,6 +239,7 @@ public class Player4 : MonoBehaviour
     }
     public void MoveCardsAfterThiefPhase()
     {
+        bool keepAdvanceNotice = SpecialActionCardSystem.IsAdvanceNoticePendingCard(3, selectedCard);
        
         if (hasCriminalRecord)
         {
@@ -241,9 +254,10 @@ public class Player4 : MonoBehaviour
 
         foreach (var card in player4Cards)
         {
+            if (SpecialActionCardSystem.IsAdvanceNoticePendingCard(3, card)) continue;
             card.MoveTo(new Vector3(5, 2, 0), 5);
         }
-        if (activeStealEffect != null)
+        if (!keepAdvanceNotice && activeStealEffect != null)
         {
             Destroy(activeStealEffect.gameObject);
             activeStealEffect = null;
@@ -261,8 +275,11 @@ public class Player4 : MonoBehaviour
 
         HasBeenArrested = false;
 
-        SelectedNumber = 0;
-        selectedCard = null;
+        if (!keepAdvanceNotice)
+        {
+            SelectedNumber = 0;
+            selectedCard = null;
+        }
 
 
     }

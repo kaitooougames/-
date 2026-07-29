@@ -138,6 +138,7 @@ public class CameraController : MonoBehaviour
             detectiveTargetSeats.Clear();
             for (int targetSeat = 0; targetSeat < 4; targetSeat++)
                 if (targetSeat != detectiveSeat && IsActionSeatActive(targetSeat) &&
+                    !SpecialActionCardSystem.IsAdvanceNoticeActiveToday(targetSeat) &&
                     GetSelectedActionCard(targetSeat) != null)
                     detectiveTargetSeats.Add(targetSeat);
             if (detectiveTargetSeats.Count == 0) continue;
@@ -260,6 +261,7 @@ public class CameraController : MonoBehaviour
         DrawPrisonRollMessage();
         DrawDetectiveAnnouncement();
         DrawAppraiserControls();
+        DrawAdvanceNoticeMessage();
         if (!detectiveChoiceActive) return;
         GUIStyle boxStyle = new GUIStyle(GUI.skin.box)
         {
@@ -283,6 +285,20 @@ public class CameraController : MonoBehaviour
                 break;
             }
         }
+    }
+
+    private void DrawAdvanceNoticeMessage()
+    {
+        if (isFlipping || !SpecialActionCardSystem.HasActiveAdvanceNoticeToday()) return;
+        GUIStyle style = new GUIStyle(GUI.skin.box)
+        {
+            fontSize = 27,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        style.normal.textColor = new Color(1f, 0.78f, 0.72f);
+        GUI.Box(new Rect(Screen.width * 0.5f - 430f, 25f, 860f, 82f),
+            "予告状が公開されています。行動カード開示まで会話禁止です。", style);
     }
 
     private void DrawAppraiserControls()
@@ -689,6 +705,7 @@ public class CameraController : MonoBehaviour
         for (int seat = 0; seat < 4; seat++)
         {
             CardInteraction selected = GetSelectedActionCard(seat);
+            if (SpecialActionCardSystem.IsAdvanceNoticeActiveToday(seat)) continue;
             if (selected != null && IsActionSeatConfigured(seat) &&
                 !selectedCards.Contains(selected))
                 selectedCards.Add(selected);
@@ -772,18 +789,18 @@ public class CameraController : MonoBehaviour
         var robberyCounts = new List<int>();
         var robberyEffects = new List<int>();
 
-        AddRobberyDeclaration(Player, ToTreasurePlayerId(0), Player != null ? Player.SelectedCard : null,
+        AddRobberyDeclaration(0, Player, ToTreasurePlayerId(0), Player != null ? Player.SelectedCard : null,
             Player != null ? Player.SelectedNumber : 0,
             Player != null && Player.HasBeenArrested, Player != null && Player.isEliminated,
             robberPlayers, robberyCounts, robberyEffects);
         if (Player2 != null && Player2.gameObject.activeInHierarchy)
-            AddRobberyDeclaration(Player2, ToTreasurePlayerId(1), Player2.SelectedCard, Player2.SelectedNumber,
+            AddRobberyDeclaration(1, Player2, ToTreasurePlayerId(1), Player2.SelectedCard, Player2.SelectedNumber,
                 Player2.HasBeenArrested, Player2.isEliminated, robberPlayers, robberyCounts, robberyEffects);
         if (Player3 != null && Player3.gameObject.activeInHierarchy)
-            AddRobberyDeclaration(Player3, ToTreasurePlayerId(2), Player3.SelectedCard, Player3.SelectedNumber,
+            AddRobberyDeclaration(2, Player3, ToTreasurePlayerId(2), Player3.SelectedCard, Player3.SelectedNumber,
                 Player3.HasBeenArrested, Player3.isEliminated, robberPlayers, robberyCounts, robberyEffects);
         if (Player4 != null && Player4.gameObject.activeInHierarchy)
-            AddRobberyDeclaration(Player4, ToTreasurePlayerId(3), Player4.SelectedCard, Player4.SelectedNumber,
+            AddRobberyDeclaration(3, Player4, ToTreasurePlayerId(3), Player4.SelectedCard, Player4.SelectedNumber,
                 Player4.HasBeenArrested, Player4.isEliminated, robberPlayers, robberyCounts, robberyEffects);
 
         Debug.Log($"<color=#FF9F70>【行動カード→怪盗】逮捕されていない怪盗 {robberPlayers.Count}人</color>");
@@ -832,6 +849,7 @@ public class CameraController : MonoBehaviour
     }
 
     private static void AddRobberyDeclaration(
+        int actionSeat,
         MonoBehaviour participant,
         int playerId,
         CardInteraction selectedCard,
@@ -845,8 +863,11 @@ public class CameraController : MonoBehaviour
         if (participant == null || !participant.gameObject.activeInHierarchy || arrested || eliminated ||
             selectedCard == null || !selectedCard.isPhantomThief)
             return;
+        if (selectedCard.specialEffect == SpecialActionEffect.AdvanceNotice &&
+            !SpecialActionCardSystem.IsAdvanceNoticeActiveToday(actionSeat)) return;
 
-        int count = Mathf.Clamp(declaredCount, 1, 6);
+        int count = selectedCard.specialEffect == SpecialActionEffect.AdvanceNotice
+            ? 10 : Mathf.Clamp(declaredCount, 1, 6);
         robberPlayers.Add(playerId);
         robberyCounts.Add(count);
         robberyEffects.Add((int)selectedCard.specialEffect);
@@ -1008,6 +1029,18 @@ public class CameraController : MonoBehaviour
         yield return new WaitForSeconds(2f);
         cardInteraction.EnableCardClicks(); // カードクリック再開
         if (handManager != null) handManager.RefreshPlayerOneCardAvailability();
+        if (SpecialActionCardSystem.TryGetActiveAdvanceNotice(0, out CardInteraction advanceNotice))
+        {
+            Player.RestoreAdvanceNotice(advanceNotice);
+            handManager?.ForceAdvanceNoticeSelection(advanceNotice);
+            Player2?.SelectRandomCard();
+            Player3?.SelectRandomCard();
+            Player4?.SelectRandomCard();
+            Debug.Log("<color=#FF7A7A>【予告状実行日】Player1は予告状のまま怪盗を開始します。</color>");
+            MoveCamera();
+            isFlipping = false;
+            yield break;
+        }
         if (SpecialActionCardSystem.CannotActToday(0))
         {
             Debug.Log("<color=#BFA8FF>【行動休止】Player1はこの日の行動を休みます。</color>");

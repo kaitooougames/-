@@ -497,7 +497,9 @@ public class TreasureController : MonoBehaviour
                                          System.Enum.IsDefined(typeof(SpecialActionEffect), specialEffects[i])
                 ? (SpecialActionEffect)specialEffects[i]
                 : SpecialActionEffect.None;
-            robberies.Add(new RobberyDeclaration(robber, Mathf.Clamp(declaredCounts[i], 1, 6)));
+            robberies.Add(new RobberyDeclaration(robber,
+                Mathf.Clamp(declaredCounts[i], 1,
+                    effect == SpecialActionEffect.AdvanceNotice ? 10 : 6)));
             robberyEffects[robber] = effect;
         }
         robberies.Sort((a, b) =>
@@ -908,7 +910,9 @@ public class TreasureController : MonoBehaviour
         if (!stolenByRobber.TryGetValue(player, out List<Treasure> stolen)) return 0;
         bool balloon = robberyEffects.TryGetValue(player, out SpecialActionEffect effect) &&
                        effect == SpecialActionEffect.Balloon;
-        return Mathf.Min(balloon ? 3 : 1, stolen.Count);
+        bool advanceNotice = robberyEffects.TryGetValue(player, out effect) &&
+                             effect == SpecialActionEffect.AdvanceNotice;
+        return Mathf.Min(balloon ? 3 : advanceNotice ? 2 : 1, stolen.Count);
     }
 
     private bool AllRobberDisplaySelectionsComplete()

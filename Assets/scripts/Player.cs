@@ -105,6 +105,13 @@ public class Player : MonoBehaviour
         }
     }
 
+    public void RestoreAdvanceNotice(CardInteraction card)
+    {
+        SelectedCard = card;
+        SelectedNumber = 10;
+        card.SelectedNumber = 10;
+    }
+
     public void EndActionWithoutArrestPenalty()
     {
         HasBeenArrested = true;
@@ -195,6 +202,7 @@ public class Player : MonoBehaviour
 
     public void MoveCardsAfterThiefPhase()
     {
+        bool keepAdvanceNotice = SpecialActionCardSystem.IsAdvanceNoticePendingCard(0, SelectedCard);
    
         if (hasCriminalRecord)
         {
@@ -211,7 +219,7 @@ public class Player : MonoBehaviour
         { ApplyPenalty(); }
 
         hasAppliedPenalty = false;
-        if (activeStealEffect != null)
+        if (!keepAdvanceNotice && activeStealEffect != null)
         {
             Destroy(activeStealEffect.gameObject);
             activeStealEffect = null;
@@ -223,8 +231,11 @@ public class Player : MonoBehaviour
         }
 
         HasBeenArrested = false;
-        SelectedCard = null;
-        SelectedNumber = 0;
+        if (!keepAdvanceNotice)
+        {
+            SelectedCard = null;
+            SelectedNumber = 0;
+        }
     }
 
 }

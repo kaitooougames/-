@@ -165,6 +165,7 @@ public class HandManager : MonoBehaviour
         for (int i = 0; i < cards.Count; i++)
         {
             if (cards[i] == null) continue;
+            if (SpecialActionCardSystem.IsAdvanceNoticePendingCard(0, cards[i])) continue;
             if (cardSelected && cards[i] == activeSelectedCard) continue;
             cards[i].SetHandManager(this);
             Vector3 target = actionHandVisible ? GetOpenCardPosition(i, basePositions) : closedHandPosition;
@@ -281,6 +282,12 @@ public class HandManager : MonoBehaviour
         foreach (CardInteraction card in cards)
         {
             if (card == null) continue;
+            if (SpecialActionCardSystem.TryGetActiveAdvanceNotice(0,
+                    out CardInteraction activeAdvanceNotice) && card != activeAdvanceNotice)
+            {
+                card.DisableClick();
+                continue;
+            }
             bool collectorBlocked = SpecialActionCardSystem.IsExhibitOnly(0) && !card.isExhibit;
             if (!actionHandVisible || gameFinished || actionBlocked ||
                 (thiefBlocked && card.isPhantomThief) || collectorBlocked)
@@ -623,13 +630,24 @@ public class HandManager : MonoBehaviour
     {
         SpecialActionCardSystem.ConsumeSelectedCards(this);
         SpecialActionCardSystem.ClearTurnEffects();
+        // 予告状は翌日の実行が終わるまで、ほかの行動手札を閉じたままにする。
+        bool keepHandClosed = SpecialActionCardSystem.HasPendingAdvanceNotice(0);
         currentDay++;
-        actionHandVisible = true;
+        actionHandVisible = !keepHandClosed;
         cardSelected = false;
         activeSelectedCard = null;
         // Start()の再実行による瞬間移動は行わず、現在位置から手札へ戻す。
         RefreshActionHandLayout();
         Debug.Log("2日目開始！");
+    }
+
+    public void ForceAdvanceNoticeSelection(CardInteraction card)
+    {
+        if (card == null) return;
+        // 先に選択中として登録し、手札を閉じる処理から予告状自身を除外する。
+        cardSelected = true;
+        activeSelectedCard = card;
+        SetActionHandVisible(false);
     }
 
 }

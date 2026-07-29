@@ -10,6 +10,14 @@ public class StealNumberEffect : MonoBehaviour
         gameObject.SetActive(true);
         numberText.gameObject.SetActive(true);
         numberText.enabled = true;
+        numberText.textWrappingMode = TextWrappingModes.NoWrap;
+        numberText.overflowMode = TextOverflowModes.Overflow;
+        if (number >= 10)
+        {
+            RectTransform textRect = numberText.rectTransform;
+            textRect.sizeDelta = new Vector2(Mathf.Max(52f, textRect.sizeDelta.x),
+                textRect.sizeDelta.y);
+        }
         numberText.text = number.ToString();
         Canvas canvas = GetComponentInParent<Canvas>();
         if (canvas != null) canvas.enabled = true;

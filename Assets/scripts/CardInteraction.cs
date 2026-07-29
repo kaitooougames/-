@@ -232,6 +232,13 @@ public class CardInteraction : MonoBehaviour
         if (!isClickable || isMoving) return; // クリック不可・移動中なら無視
         if (handManager != null && handManager.CardSelected) return;
 
+        if (SpecialActionCardSystem.TryGetActiveAdvanceNotice(0,
+                out CardInteraction activeAdvanceNotice) && this != activeAdvanceNotice)
+        {
+            Debug.Log("【予告状実行日】Player1はほかの行動カードを選べません。");
+            return;
+        }
+
         Player player = FindObjectOfType<Player>();
         if (player == null || player.isEliminated) return;
         if (!SpecialActionCardSystem.CanSelect(0, this))
@@ -256,6 +263,13 @@ public class CardInteraction : MonoBehaviour
                 {
                     // 予告状は宣言数10固定なので数字選択を表示せず、そのまま確定する。
                     OnNumberSelected(10);
+                    // 予告状を出した日から翌日の実行終了まで、ほかの行動手札は収納する。
+                    handManager?.SetActionHandVisible(false);
+                    // 通常の怪盗は数字パネル確定後にここを通るが、予告状は即決定で
+                    // PerformClickを抜けるため、ほかのプレイヤー選択を明示的に開始する。
+                    FindObjectOfType<Player2>()?.SelectRandomCard();
+                    FindObjectOfType<Player3>()?.SelectRandomCard();
+                    FindObjectOfType<Player4>()?.SelectRandomCard();
                     return;
                 }
                 ShowNumberSelection();
@@ -389,6 +403,7 @@ public class CardInteraction : MonoBehaviour
         {
             player.SelectCard(this, number);
         }
+        SpecialActionCardSystem.NotifySelected(0, this);
 
         if (numberSelectionPanel) numberSelectionPanel.SetActive(false);
 
@@ -552,6 +567,15 @@ public class CardInteraction : MonoBehaviour
         CardInteraction[] allCards = FindObjectsOfType<CardInteraction>();
         foreach (var card in allCards)
         {
+            // 翌日実行待ちの予告状は、卓上の角度・位置・宣言表示をそのまま維持する。
+            bool pendingAdvanceNotice = false;
+            for (int seat = 0; seat < 4; seat++)
+            {
+                if (!SpecialActionCardSystem.IsAdvanceNoticePendingCard(seat, card)) continue;
+                pendingAdvanceNotice = true;
+                break;
+            }
+            if (pendingAdvanceNotice) continue;
             card.isClickable = true;  // クリックを再度有効化
             card.hasMoved = false;    // **移動フラグをリセット**
             card.numberSelected = false; // **数字選択フラグをリセット**

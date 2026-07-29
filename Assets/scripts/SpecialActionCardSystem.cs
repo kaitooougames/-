@@ -16,6 +16,10 @@ public static class SpecialActionCardSystem
         new Dictionary<int, CardInteraction>();
     private static readonly Dictionary<int, CardInteraction> thiefTemplates =
         new Dictionary<int, CardInteraction>();
+    private static readonly Dictionary<int, CardInteraction> pendingAdvanceNotices =
+        new Dictionary<int, CardInteraction>();
+    private static readonly Dictionary<int, int> advanceNoticeActiveDay =
+        new Dictionary<int, int>();
     private static bool initialCardsDealt;
     private static bool soloStageCreated;
     private static bool watchdogCreated;
@@ -37,6 +41,8 @@ public static class SpecialActionCardSystem
         handPositions.Clear();
         exhibitTemplates.Clear();
         thiefTemplates.Clear();
+        pendingAdvanceNotices.Clear();
+        advanceNoticeActiveDay.Clear();
     }
 
     public static void DealInitialCards(HandManager handManager)
@@ -248,6 +254,51 @@ public static class SpecialActionCardSystem
     {
         if (card != null && exhibitOnlyNextTurn.Contains(seat) && card.isExhibit)
             exhibitOnlyNextTurn.Remove(seat);
+        if (card != null && card.specialEffect == SpecialActionEffect.AdvanceNotice &&
+            !pendingAdvanceNotices.ContainsKey(seat))
+        {
+            pendingAdvanceNotices[seat] = card;
+            int day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1;
+            advanceNoticeActiveDay[seat] = day + 1;
+            Debug.Log($"<color=#FF7A7A>【予告状】P{seat + 1}は本日は盗まず、{day + 1}日目に実行します。</color>");
+        }
+    }
+
+    public static bool IsAdvanceNoticePendingCard(int seat, CardInteraction card) =>
+        card != null && pendingAdvanceNotices.TryGetValue(seat, out CardInteraction pending) &&
+        pending == card;
+
+    public static bool HasPendingAdvanceNotice(int seat) =>
+        pendingAdvanceNotices.TryGetValue(seat, out CardInteraction card) && card != null;
+
+    public static bool IsAdvanceNoticeActiveToday(int seat)
+    {
+        int day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1;
+        return pendingAdvanceNotices.ContainsKey(seat) &&
+               advanceNoticeActiveDay.TryGetValue(seat, out int activeDay) && day >= activeDay;
+    }
+
+    public static bool TryGetActiveAdvanceNotice(int seat, out CardInteraction card)
+    {
+        if (IsAdvanceNoticeActiveToday(seat) && pendingAdvanceNotices.TryGetValue(seat, out card) &&
+            card != null) return true;
+        card = null;
+        return false;
+    }
+
+    public static bool IsAdvanceNoticeWaiting(CardInteraction card)
+    {
+        if (card == null) return false;
+        foreach (KeyValuePair<int, CardInteraction> entry in pendingAdvanceNotices)
+            if (entry.Value == card) return !IsAdvanceNoticeActiveToday(entry.Key);
+        return false;
+    }
+
+    public static bool HasActiveAdvanceNoticeToday()
+    {
+        foreach (int seat in pendingAdvanceNotices.Keys)
+            if (IsAdvanceNoticeActiveToday(seat)) return true;
+        return false;
     }
 
     public static void ConsumeSelectedCards(HandManager handManager)
@@ -266,6 +317,13 @@ public static class SpecialActionCardSystem
     private static void Consume(int seat, CardInteraction card, List<CardInteraction> ownerCards, HandManager handManager)
     {
         if (card == null || !card.IsSpecialAction) return;
+        if (card.specialEffect == SpecialActionEffect.AdvanceNotice &&
+            IsAdvanceNoticePendingCard(seat, card))
+        {
+            if (!IsAdvanceNoticeActiveToday(seat)) return;
+            pendingAdvanceNotices.Remove(seat);
+            advanceNoticeActiveDay.Remove(seat);
+        }
         if (card.specialEffect == SpecialActionEffect.Collector)
             exhibitOnlyNextTurn.Add(seat);
         ownerCards?.Remove(card);
