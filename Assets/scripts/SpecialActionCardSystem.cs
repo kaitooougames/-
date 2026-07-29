@@ -20,6 +20,12 @@ public static class SpecialActionCardSystem
         new Dictionary<int, CardInteraction>();
     private static readonly Dictionary<int, int> advanceNoticeActiveDay =
         new Dictionary<int, int>();
+    private static readonly Dictionary<int, int> consecutiveCageCounts =
+        new Dictionary<int, int>();
+    private static readonly Dictionary<int, int> cageSelectionRecordedDay =
+        new Dictionary<int, int>();
+    private static readonly Dictionary<int, CardInteraction> twoPlayerBonusThieves =
+        new Dictionary<int, CardInteraction>();
     private static bool initialCardsDealt;
     private static bool soloStageCreated;
     private static bool watchdogCreated;
@@ -43,6 +49,63 @@ public static class SpecialActionCardSystem
         thiefTemplates.Clear();
         pendingAdvanceNotices.Clear();
         advanceNoticeActiveDay.Clear();
+        consecutiveCageCounts.Clear();
+        cageSelectionRecordedDay.Clear();
+        twoPlayerBonusThieves.Clear();
+    }
+
+    public static void ConfigureTwoPlayerNormalThieves(HandManager handManager, bool enabled)
+    {
+        if (handManager == null) return;
+        if (!enabled)
+        {
+            consecutiveCageCounts.Remove(0);
+            consecutiveCageCounts.Remove(1);
+            cageSelectionRecordedDay.Remove(0);
+            cageSelectionRecordedDay.Remove(1);
+        }
+        for (int seat = 0; seat <= 1; seat++)
+        {
+            List<CardInteraction> ownerCards = GetCards(seat);
+            if (ownerCards == null) continue;
+            if (!twoPlayerBonusThieves.TryGetValue(seat, out CardInteraction bonus) || bonus == null)
+            {
+                if (!enabled) continue;
+                CardInteraction template = ownerCards.Find(card => card != null &&
+                    card.isPhantomThief && !card.IsSpecialAction);
+                if (template == null) continue;
+                GameObject clone = Object.Instantiate(template.gameObject, template.transform.parent);
+                bonus = clone.GetComponent<CardInteraction>();
+                bonus.name = template.name + "_2人用追加";
+                bonus.InitializeHandPose(template.transform.position, template.transform.rotation);
+                twoPlayerBonusThieves[seat] = bonus;
+            }
+
+            if (enabled)
+            {
+                if (!ownerCards.Contains(bonus))
+                {
+                    int thiefIndex = ownerCards.FindIndex(card => card != null &&
+                        card != bonus && card.isPhantomThief && !card.IsSpecialAction);
+                    ownerCards.Insert(thiefIndex >= 0 ? thiefIndex + 1 : ownerCards.Count, bonus);
+                }
+                if (seat == 0 && !handManager.cards.Contains(bonus))
+                {
+                    int thiefIndex = handManager.cards.FindIndex(card => card != null &&
+                        card != bonus && card.isPhantomThief && !card.IsSpecialAction);
+                    handManager.cards.Insert(
+                        thiefIndex >= 0 ? thiefIndex + 1 : handManager.cards.Count, bonus);
+                    bonus.SetHandManager(handManager);
+                }
+                bonus.gameObject.SetActive(true);
+            }
+            else
+            {
+                ownerCards.Remove(bonus);
+                if (seat == 0) handManager.cards.Remove(bonus);
+                bonus.gameObject.SetActive(false);
+            }
+        }
     }
 
     public static void DealInitialCards(HandManager handManager)
@@ -232,7 +295,26 @@ public static class SpecialActionCardSystem
     public static bool CanSelect(int seat, CardInteraction card)
     {
         return card != null && !CannotActToday(seat) &&
-               (!exhibitOnlyNextTurn.Contains(seat) || card.isExhibit);
+               (!exhibitOnlyNextTurn.Contains(seat) || card.isExhibit) &&
+               !(IsTwoPlayerGame() && card.isCage && GetConsecutiveCageCount(seat) >= 3);
+    }
+
+    public static int GetConsecutiveCageCount(int seat) =>
+        consecutiveCageCounts.TryGetValue(seat, out int count) ? count : 0;
+
+    private static bool IsTwoPlayerGame() =>
+        HandManager.Instance != null && HandManager.Instance.ActionPlayerCount == 2;
+
+    public static void FinalizeTwoPlayerCageStreaks()
+    {
+        if (!IsTwoPlayerGame()) return;
+        int day = HandManager.Instance.CurrentDay;
+        for (int seat = 0; seat <= 1; seat++)
+        {
+            if (cageSelectionRecordedDay.TryGetValue(seat, out int recordedDay) && recordedDay == day)
+                continue;
+            consecutiveCageCounts[seat] = 0;
+        }
     }
 
     public static bool IsExhibitOnly(int seat) => exhibitOnlyNextTurn.Contains(seat);
@@ -252,6 +334,17 @@ public static class SpecialActionCardSystem
 
     public static void NotifySelected(int seat, CardInteraction card)
     {
+        if (IsTwoPlayerGame() && seat <= 1)
+        {
+            int day = HandManager.Instance.CurrentDay;
+            if (!cageSelectionRecordedDay.TryGetValue(seat, out int recordedDay) || recordedDay != day)
+            {
+                consecutiveCageCounts[seat] = card != null && card.isCage
+                    ? GetConsecutiveCageCount(seat) + 1
+                    : 0;
+                cageSelectionRecordedDay[seat] = day;
+            }
+        }
         if (card != null && exhibitOnlyNextTurn.Contains(seat) && card.isExhibit)
             exhibitOnlyNextTurn.Remove(seat);
         if (card != null && card.specialEffect == SpecialActionEffect.AdvanceNotice &&

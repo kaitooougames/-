@@ -200,6 +200,19 @@ public class Player : MonoBehaviour
         return isFirstOffense;
     }
 
+    public void ResetPenaltyCards()
+    {
+        foreach (ArrestPenaltyCard penaltyCard in PenaltyCards1)
+            if (penaltyCard != null) Destroy(penaltyCard.gameObject);
+        PenaltyCards1.Clear();
+        if (activeArrestEffect != null) Destroy(activeArrestEffect.gameObject);
+        activeArrestEffect = null;
+        hasCriminalRecord = false;
+        isFirstOffense = false;
+        hasAppliedPenalty = false;
+        HasBeenArrested = false;
+    }
+
     public void MoveCardsAfterThiefPhase()
     {
         bool keepAdvanceNotice = SpecialActionCardSystem.IsAdvanceNoticePendingCard(0, SelectedCard);

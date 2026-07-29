@@ -243,7 +243,9 @@ public class CardInteraction : MonoBehaviour
         if (player == null || player.isEliminated) return;
         if (!SpecialActionCardSystem.CanSelect(0, this))
         {
-            Debug.Log("コレクターの効果により、今ターンは展示カードしか選べません。");
+            Debug.Log(isCage
+                ? "2人用ルールにより、檻を4日連続で出すことはできません。"
+                : "現在の効果により、この行動カードは選べません。");
             return;
         }
 

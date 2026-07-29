@@ -34,6 +34,7 @@ public class HandManager : MonoBehaviour
     private bool honeyTrapInspectionActive;
     private bool honeyTrapInspectionConfirmed;
     private string honeyTrapInspectionMessage = "";
+    private bool initializationComplete;
 
     public bool ActionHandVisible => actionHandVisible;
     public int ActionPlayerCount => actionPlayerCount;
@@ -73,6 +74,7 @@ public class HandManager : MonoBehaviour
         SetInitialPositions(); // 初期位置を設定
         Invoke("ArrangeHand", 1.0f); // 1秒後に手札を並べる
         Invoke(nameof(RefreshPlayerOneCardAvailability), 1.05f);
+        initializationComplete = true;
     }
 
     // **カードの初期位置を (0,3,-4) に設定**
@@ -92,7 +94,11 @@ public class HandManager : MonoBehaviour
 
     public void ApplyPlayerCount(int count)
     {
-        actionPlayerCount = Mathf.Clamp(count, 2, 4);
+        int newPlayerCount = Mathf.Clamp(count, 2, 4);
+        bool playerCountChanged = newPlayerCount != actionPlayerCount;
+        actionPlayerCount = newPlayerCount;
+
+        if (playerCountChanged) ResetAllPenaltyCards();
 
         // 3人時はPlayer2席を空け、お宝側と同じPlayer1・3・4を使う。
         bool usePlayer2 = actionPlayerCount == 2 || actionPlayerCount == 4;
@@ -102,8 +108,26 @@ public class HandManager : MonoBehaviour
         SetOpponentActive(FindFirstObjectByType<Player2>(FindObjectsInactive.Include), usePlayer2);
         SetOpponentActive(FindFirstObjectByType<Player3>(FindObjectsInactive.Include), usePlayer3);
         SetOpponentActive(FindFirstObjectByType<Player4>(FindObjectsInactive.Include), usePlayer4);
+        SpecialActionCardSystem.ConfigureTwoPlayerNormalThieves(this, actionPlayerCount == 2);
+        // Start中に即時配置すると、CardInteractionが基準Scaleを保存する前に
+        // 全カードをゼロサイズへ変更してしまう。実行中の人数切替時だけ再配置する。
+        if (initializationComplete)
+        {
+            actionScrollOffset = 0f;
+            actionHandVisible = true;
+            RefreshActionHandLayout(true);
+        }
 
         Debug.Log($"<color=#70E8FF>【行動カード人数】{actionPlayerCount}人プレイ</color>");
+    }
+
+    private static void ResetAllPenaltyCards()
+    {
+        FindFirstObjectByType<Player>(FindObjectsInactive.Include)?.ResetPenaltyCards();
+        FindFirstObjectByType<Player2>(FindObjectsInactive.Include)?.ResetPenaltyCards();
+        FindFirstObjectByType<Player3>(FindObjectsInactive.Include)?.ResetPenaltyCards();
+        FindFirstObjectByType<Player4>(FindObjectsInactive.Include)?.ResetPenaltyCards();
+        Debug.Log("<color=#70E8FF>【人数切替】全Playerのペナルティカードをリセットしました。</color>");
     }
 
     private static void SetOpponentActive(Player2 player, bool active)
@@ -288,9 +312,9 @@ public class HandManager : MonoBehaviour
                 card.DisableClick();
                 continue;
             }
-            bool collectorBlocked = SpecialActionCardSystem.IsExhibitOnly(0) && !card.isExhibit;
+            bool ruleBlocked = !SpecialActionCardSystem.CanSelect(0, card);
             if (!actionHandVisible || gameFinished || actionBlocked ||
-                (thiefBlocked && card.isPhantomThief) || collectorBlocked)
+                (thiefBlocked && card.isPhantomThief) || ruleBlocked)
                 card.DisableClick();
             else
                 card.EnableClick();
@@ -517,7 +541,8 @@ public class HandManager : MonoBehaviour
         float width = 280f * uiScale;
         float height = 50f * uiScale;
         float y = Screen.height + displayButtonOffset.y * uiScale;
-        float firstX = (Screen.width - width) * 0.5f + displayButtonOffset.x * uiScale;
+        // 真贋チェックは手札中央を塞がないよう、画面右下寄りへ置く。
+        float firstX = Screen.width - width - 14f * uiScale + displayButtonOffset.x * uiScale;
         string viewLabel = viewing ? "展示場を見るのをやめる" : "自分の展示場を見る（真贋チェック）";
         if (GUI.Button(new Rect(firstX, y, width, height), viewLabel, buttonStyle))
         {
@@ -573,9 +598,12 @@ public class HandManager : MonoBehaviour
             int treasureCount = treasureController != null ? treasureController.GetHandCount(treasureId) : 0;
             string prisonStatus = SpecialActionCardSystem.IsImprisoned(id) ? "  【監獄】" :
                 SpecialActionCardSystem.IsExcludedFromActionToday(id) ? "  【休み】" : "";
+            string cageStatus = actionPlayerCount == 2
+                ? $"  檻:{SpecialActionCardSystem.GetConsecutiveCageCount(id)}/3"
+                : "";
             GUI.Label(new Rect(startX + width * i, Screen.height + playerCountsOffset.y * uiScale,
                     width, 34f * uiScale),
-                $"P{id + 1}  行動:{actionCount}  宝:{treasureCount}{prisonStatus}", style);
+                $"P{id + 1}  行動:{actionCount}  宝:{treasureCount}{cageStatus}{prisonStatus}", style);
         }
     }
 
@@ -628,6 +656,7 @@ public class HandManager : MonoBehaviour
 
     public void MoveCardsAfterThiefPhase()
     {
+        SpecialActionCardSystem.FinalizeTwoPlayerCageStreaks();
         SpecialActionCardSystem.ConsumeSelectedCards(this);
         SpecialActionCardSystem.ClearTurnEffects();
         // 予告状は翌日の実行が終わるまで、ほかの行動手札を閉じたままにする。
