@@ -110,6 +110,7 @@ public class CardInteraction : MonoBehaviour
     private Vector3 lastPointerPosition;
     private const float HandDragThreshold = 12f;
     public int SelectedNumber { get; set; } // 怪盗カードの選択した数字（1~6）
+    public Quaternion HandPoseRotation => originalRotation;
     private StealNumberEffect activeStealEffect; // 現在の怪盗宣言エフェクト
 
     private ArrestEffect activeArrestEffect; // 現在の逮捕エフェクト
@@ -302,6 +303,15 @@ public class CardInteraction : MonoBehaviour
         transform.rotation = originalRotation;
         transform.localScale = selectedHoverLocked ? originalScale * SelectedThiefScale : originalScale;
         isMoving = false;
+    }
+
+    public void MoveToInspection(Vector3 newPosition, Quaternion newRotation, float speed = 7f)
+    {
+        transform.localScale = originalScale;
+        targetPosition = newPosition;
+        targetRotation = newRotation;
+        isMoving = true;
+        moveSpeed = speed;
     }
 
 

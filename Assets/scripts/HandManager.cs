@@ -31,6 +31,9 @@ public class HandManager : MonoBehaviour
     private bool actionCardGripActive;
     private float lastActionDragX;
     private float actionHandVelocity;
+    private bool honeyTrapInspectionActive;
+    private bool honeyTrapInspectionConfirmed;
+    private string honeyTrapInspectionMessage = "";
 
     public bool ActionHandVisible => actionHandVisible;
     public int ActionPlayerCount => actionPlayerCount;
@@ -320,6 +323,112 @@ public class HandManager : MonoBehaviour
         DrawDayCounter();
         DrawAllSpecialCardsTestButton(style);
         DrawAppraiserAnalysisTestButton(style);
+        DrawHoneyTrapInspection(style);
+    }
+
+    private void DrawHoneyTrapInspection(GUIStyle style)
+    {
+        if (!honeyTrapInspectionActive) return;
+        GUIStyle messageStyle = new GUIStyle(GUI.skin.box)
+        {
+            fontSize = Mathf.RoundToInt(15f * uiScale),
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter,
+            wordWrap = false
+        };
+        float messageWidth = Mathf.Min(Screen.width - 80f, 1240f);
+        GUI.Box(new Rect((Screen.width - messageWidth) * 0.5f, 24f, messageWidth, 70f),
+            honeyTrapInspectionMessage, messageStyle);
+        if (GUI.Button(new Rect(Screen.width * 0.5f - 140f, 105f, 280f, 58f),
+                "確認終了", style))
+            honeyTrapInspectionConfirmed = true;
+    }
+
+    public System.Collections.IEnumerator ShowHoneyTrapHand(
+        int victimActionSeat, bool includeSpecialCards)
+    {
+        List<CardInteraction> ownerCards = GetActionCardsForSeat(victimActionSeat);
+        if (ownerCards == null) yield break;
+        CardInteraction playedCard = GetSelectedActionCardForSeat(victimActionSeat);
+        List<CardInteraction> heldCards = ownerCards.FindAll(card => card != null &&
+            (includeSpecialCards || !card.IsSpecialAction));
+        // 場に出したカードはすでに見えているので動かさず、残りの保有カードだけ確認欄へ並べる。
+        List<CardInteraction> visibleCards = heldCards.FindAll(card =>
+            card != playedCard &&
+            card != null);
+        if (heldCards.Count == 0) yield break;
+
+        SetActionHandVisible(false);
+        float spacing = Mathf.Min(0.64f, 5.4f / Mathf.Max(1, visibleCards.Count - 1));
+        float startX = -spacing * (visibleCards.Count - 1) * 0.5f;
+        CardInteraction playerOneHandReference = cards.Find(card => card != null);
+        Quaternion inspectionRotation = playerOneHandReference != null
+            ? playerOneHandReference.HandPoseRotation
+            : Quaternion.Euler(180f, 0f, 180f);
+        for (int i = 0; i < visibleCards.Count; i++)
+        {
+            visibleCards[i].DisableClick(false);
+            visibleCards[i].MoveToInspection(new Vector3(startX + spacing * i, 2.1f, -1.45f),
+                inspectionRotation, 8f);
+        }
+        string playedNote = playedCard != null && heldCards.Contains(playedCard)
+            ? "（場に出ている1枚を含む）" : "";
+        honeyTrapInspectionMessage = includeSpecialCards
+            ? $"ハニートラップ：Player{victimActionSeat + 1}が保有する行動カード全{heldCards.Count}枚{playedNote}"
+            : $"ハニートラップ：Player{victimActionSeat + 1}が保有する通常行動カード全{heldCards.Count}枚{playedNote}";
+        honeyTrapInspectionConfirmed = false;
+        honeyTrapInspectionActive = true;
+        while (!honeyTrapInspectionConfirmed) yield return null;
+        honeyTrapInspectionActive = false;
+
+        Vector3 storage = victimActionSeat == 1 ? new Vector3(0f, 2f, 2.5f) :
+            victimActionSeat == 2 ? new Vector3(-5f, 2f, 0f) : new Vector3(5f, 2f, 0f);
+        foreach (CardInteraction card in visibleCards)
+            card.MoveTo(storage, 7f);
+        yield return new WaitForSeconds(0.5f);
+        honeyTrapInspectionMessage = "";
+    }
+
+    private static List<CardInteraction> GetActionCardsForSeat(int seat)
+    {
+        if (seat == 0)
+        {
+            Player player = FindFirstObjectByType<Player>(FindObjectsInactive.Include);
+            return player != null ? player.playerCards : null;
+        }
+        if (seat == 1)
+        {
+            Player2 player = FindFirstObjectByType<Player2>(FindObjectsInactive.Include);
+            return player != null ? player.player2Cards : null;
+        }
+        if (seat == 2)
+        {
+            Player3 player = FindFirstObjectByType<Player3>(FindObjectsInactive.Include);
+            return player != null ? player.player3Cards : null;
+        }
+        Player4 player4 = FindFirstObjectByType<Player4>(FindObjectsInactive.Include);
+        return player4 != null ? player4.player4Cards : null;
+    }
+
+    private static CardInteraction GetSelectedActionCardForSeat(int seat)
+    {
+        if (seat == 0)
+        {
+            Player player = FindFirstObjectByType<Player>(FindObjectsInactive.Include);
+            return player != null ? player.SelectedCard : null;
+        }
+        if (seat == 1)
+        {
+            Player2 player = FindFirstObjectByType<Player2>(FindObjectsInactive.Include);
+            return player != null ? player.SelectedCard : null;
+        }
+        if (seat == 2)
+        {
+            Player3 player = FindFirstObjectByType<Player3>(FindObjectsInactive.Include);
+            return player != null ? player.SelectedCard : null;
+        }
+        Player4 player4 = FindFirstObjectByType<Player4>(FindObjectsInactive.Include);
+        return player4 != null ? player4.SelectedCard : null;
     }
 
     private void DrawAppraiserAnalysisTestButton(GUIStyle style)

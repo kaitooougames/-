@@ -30,6 +30,8 @@ public class TreasureController : MonoBehaviour
     private readonly List<RobberyDeclaration> robberies = new List<RobberyDeclaration>();
     private readonly List<Treasure> stolenThisRobbery = new List<Treasure>();
     private readonly Dictionary<Player, List<Treasure>> stolenByRobber = new Dictionary<Player, List<Treasure>>();
+    private readonly Dictionary<Player, Dictionary<Player, int>> stolenCountsByVictim =
+        new Dictionary<Player, Dictionary<Player, int>>();
     private readonly Dictionary<Player, List<Treasure>> robberDisplaySelections = new Dictionary<Player, List<Treasure>>();
     private readonly Dictionary<Player, SpecialActionEffect> robberyEffects = new Dictionary<Player, SpecialActionEffect>();
     private readonly HashSet<Player> analysisCompleted = new HashSet<Player>();
@@ -376,7 +378,7 @@ public class TreasureController : MonoBehaviour
         displaySelections.Clear(); requiredDisplayCounts.Clear(); displayTypeRestrictions.Clear();
         optionalRelicDoubleDisplayPlayers.Clear();
         displayPlayers.Clear(); robberies.Clear(); stolenThisRobbery.Clear();
-        stolenByRobber.Clear(); robberDisplaySelections.Clear();
+        stolenByRobber.Clear(); stolenCountsByVictim.Clear(); robberDisplaySelections.Clear();
         blockedFromWinningThisTurn.Clear();
         queuedArrestRewardPlayerIds.Clear();
         endTurnAfterCurrentDisplay = false;
@@ -695,6 +697,13 @@ public class TreasureController : MonoBehaviour
         Phase = TreasurePhase.Displaying;
         RefreshInteraction();
         Player oldOwner = card.Owner;
+        if (!stolenCountsByVictim.TryGetValue(ActiveRobber, out Dictionary<Player, int> victimCounts))
+        {
+            victimCounts = new Dictionary<Player, int>();
+            stolenCountsByVictim.Add(ActiveRobber, victimCounts);
+        }
+        victimCounts[oldOwner] = victimCounts.TryGetValue(oldOwner, out int previousCount)
+            ? previousCount + 1 : 1;
         oldOwner.RemoveDisplayed(card); // 他の展示品はここでは詰めない。
         ActiveRobber.AddToStock(card);
         if (ActiveRobber.PlayerId == 0 && !ActiveRobber.HandVisible)
@@ -726,14 +735,50 @@ public class TreasureController : MonoBehaviour
         Debug.Log($"【怪盗】プレイヤー{ActiveRobber.PlayerId + 1} が {card.name} を盗みました。残り {stealsRemaining} 枚");
         if (stealsRemaining <= 0)
         {
-            robberyIndex++;
-            StartNextRobbery();
+            StartCoroutine(FinishRobberyAndStartNext(ActiveRobber));
         }
         else
         {
             Phase = TreasurePhase.Robbing;
             RefreshInteraction();
         }
+    }
+
+    private IEnumerator FinishRobberyAndStartNext(Player robber)
+    {
+        if (robber != null && robberyEffects.TryGetValue(robber, out SpecialActionEffect effect) &&
+            effect == SpecialActionEffect.HoneyTrap &&
+            stolenCountsByVictim.TryGetValue(robber, out Dictionary<Player, int> victimCounts))
+        {
+            HandManager manager = HandManager.Instance;
+            foreach (KeyValuePair<Player, int> victim in victimCounts)
+            {
+                int victimSeat = manager != null
+                    ? ActionSeatFromTreasurePlayerId(victim.Key.PlayerId, manager)
+                    : victim.Key.PlayerId;
+                Debug.Log($"<color=#FF87D7>【ハニートラップ】P{robber.PlayerId + 1}が" +
+                          $"P{victim.Key.PlayerId + 1}から{victim.Value}枚盗難。" +
+                          (victim.Value >= 2 ? "保有する行動カードを全公開。" : "保有する通常行動カードを公開。") +
+                          "</color>");
+                if (robber.PlayerId == 0 && manager != null)
+                    yield return manager.StartCoroutine(
+                        manager.ShowHoneyTrapHand(victimSeat, victim.Value >= 2));
+                else
+                    yield return new WaitForSeconds(0.65f);
+            }
+        }
+        robberyIndex++;
+        StartNextRobbery();
+    }
+
+    private static int ActionSeatFromTreasurePlayerId(int treasurePlayerId, HandManager manager)
+    {
+        if (manager != null && manager.ActionPlayerCount == 3)
+        {
+            if (treasurePlayerId == 1) return 2;
+            if (treasurePlayerId == 2) return 3;
+        }
+        return treasurePlayerId;
     }
 
     private IEnumerator ResolveRobberDisplays()
