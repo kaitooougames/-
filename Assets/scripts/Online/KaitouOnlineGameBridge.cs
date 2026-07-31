@@ -738,7 +738,7 @@ namespace KaitouOnline
                     OnlineSeatChoice grantTarget =
                         Protocol.Parse<OnlineSeatChoice>(envelope.payload);
                     int localSeat = LocalIndexForNetworkSeat(grantTarget.actorSeat);
-                    SpecialActionCardSystem.GrantUnverifiedSpecialCardsToSeat(
+                    SpecialActionCardSystem.GrantAllSpecialCardsToSeat(
                         localSeat, HandManager.Instance);
                 }
                 return;
@@ -1076,15 +1076,15 @@ namespace KaitouOnline
 
             placementStarted = true;
             placementDay = snapshotDay;
-            // 選択が揃った時点で残りの移動だけ完了させる。
-            // カード移動待ちで従来の開示テンポを遅くしない。
-            CompleteSelectedActionCardPlacement();
-            ReportPlacementReady(snapshotDay);
+            WaitingMessage = "行動カードを伏せて配置しています。";
+            StartCoroutine(ReportPlacementReadyWhenFinished(snapshotDay));
         }
 
-        private void ReportPlacementReady(int day)
+        private System.Collections.IEnumerator ReportPlacementReadyWhenFinished(int day)
         {
-            if (placementDay != day) return;
+            while (placementDay == day && AnySelectedActionCardMoving())
+                yield return null;
+            if (placementDay != day) yield break;
             session.SendAction(new ActionRequest
             {
                 action = "action_placement_ready",
@@ -1098,12 +1098,14 @@ namespace KaitouOnline
             WaitingMessage = "相手の行動カード配置を待っています。";
         }
 
-        private static void CompleteSelectedActionCardPlacement()
+        private static bool AnySelectedActionCardMoving()
         {
             Player player = Object.FindFirstObjectByType<Player>();
-            player?.SelectedCard?.CompleteCurrentMoveImmediately();
+            if (player != null && player.SelectedCard != null &&
+                player.SelectedCard.IsMoving) return true;
             Player2 player2 = Object.FindFirstObjectByType<Player2>();
-            player2?.SelectedCard?.CompleteCurrentMoveImmediately();
+            return player2 != null && player2.SelectedCard != null &&
+                   player2.SelectedCard.IsMoving;
         }
 
         private void BeginSynchronizedReveal(int day)

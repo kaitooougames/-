@@ -353,7 +353,6 @@ public class HandManager : MonoBehaviour
         DrawPlayerCounts();
         DrawDayCounter();
         DrawAllSpecialCardsTestButton(style);
-        DrawAppraiserAnalysisTestButton(style);
         DrawHoneyTrapInspection(style);
     }
 
@@ -466,21 +465,6 @@ public class HandManager : MonoBehaviour
         return player4 != null ? player4.SelectedCard : null;
     }
 
-    private void DrawAppraiserAnalysisTestButton(GUIStyle style)
-    {
-        if (!showAllSpecialCardsButton) return;
-        float width = 245f * uiScale;
-        float height = 44f * uiScale;
-        Rect rect = new Rect(
-            allSpecialCardsButtonOffset.x,
-            allSpecialCardsButtonOffset.y + height + 10f,
-            width, height);
-        GUI.enabled = !cardSelected && !gameFinished;
-        if (GUI.Button(rect, "テスト：分析＋鑑定＋大型トラック", style))
-            SpecialActionCardSystem.StartAppraiserAnalysisTest(this);
-        GUI.enabled = true;
-    }
-
     private void DrawAllSpecialCardsTestButton(GUIStyle style)
     {
         if (!showAllSpecialCardsButton) return;
@@ -491,12 +475,12 @@ public class HandManager : MonoBehaviour
             allSpecialCardsButtonOffset.y,
             width, height);
         GUI.enabled = !cardSelected && !gameFinished;
-        if (GUI.Button(rect, "テスト：未確認の特殊カード", style))
+        if (GUI.Button(rect, "テスト：自分に特殊カード全種類", style))
         {
             if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
                 KaitouOnline.KaitouOnlineGameBridge.RequestGrantAllSpecialCards();
             else
-                SpecialActionCardSystem.GrantUnverifiedSpecialCardsToPlayerOne(this);
+                SpecialActionCardSystem.GrantAllSpecialCardsToPlayerOne(this);
         }
         GUI.enabled = true;
     }

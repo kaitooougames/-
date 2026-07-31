@@ -1212,8 +1212,14 @@ public class CameraController : MonoBehaviour
     {
         TreasureGame.TreasureController treasureController =
             FindFirstObjectByType<TreasureGame.TreasureController>();
-        if (treasureController != null && treasureController.Phase == TreasureGame.TreasurePhase.Waiting)
+        if (treasureController != null)
         {
+            while (treasureController.Phase != TreasureGame.TreasurePhase.Waiting &&
+                   treasureController.Phase != TreasureGame.TreasurePhase.GameOver)
+                yield return null;
+            if (treasureController.Phase == TreasureGame.TreasurePhase.GameOver)
+                yield break;
+
             var eliminatedPlayers = new List<int>();
             if (Player != null && Player.isEliminated) eliminatedPlayers.Add(ToTreasurePlayerId(0));
             if (Player2 != null && Player2.gameObject.activeInHierarchy && Player2.isEliminated) eliminatedPlayers.Add(ToTreasurePlayerId(1));

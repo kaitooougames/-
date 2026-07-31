@@ -169,10 +169,15 @@ public static class SpecialActionCardSystem
 
     public static void GrantAllSpecialCardsToPlayerOne(HandManager handManager)
     {
+        GrantAllSpecialCardsToSeat(0, handManager);
+    }
+
+    public static void GrantAllSpecialCardsToSeat(int seat, HandManager handManager)
+    {
         if (handManager == null) return;
-        List<CardInteraction> ownerCards = GetCards(0);
+        List<CardInteraction> ownerCards = GetCards(seat);
         if (ownerCards == null ||
-            !TryGetTemplates(0, ownerCards, out CardInteraction exhibitTemplate,
+            !TryGetTemplates(seat, ownerCards, out CardInteraction exhibitTemplate,
                 out CardInteraction thiefTemplate))
             return;
 
@@ -185,17 +190,20 @@ public static class SpecialActionCardSystem
                     card != null && card.specialEffect == effect)) continue;
             bool needsThiefTemplate = IsThiefEffect(effect);
             CardInteraction card = CreateCard(
-                needsThiefTemplate ? thiefTemplate : exhibitTemplate, effect, 0);
+                needsThiefTemplate ? thiefTemplate : exhibitTemplate, effect, seat);
             if (effect == SpecialActionEffect.SoloStage) soloStageCreated = true;
             if (effect == SpecialActionEffect.Watchdog) watchdogCreated = true;
             if (effect == SpecialActionEffect.AdvanceNotice) advanceNoticeCreated = true;
             ownerCards.Add(card);
-            handManager.cards.Add(card);
-            card.SetHandManager(handManager);
+            if (seat == 0)
+            {
+                handManager.cards.Add(card);
+                card.SetHandManager(handManager);
+            }
         }
         handManager.RefreshActionHandLayout();
         handManager.RefreshPlayerOneCardAvailability();
-        Debug.Log("【テスト配布】Player1に実装済み特殊行動カード全種類を配布しました。");
+        Debug.Log($"【テスト配布】Player{seat + 1}に特殊行動カード全種類を配布しました。");
     }
 
     public static void GrantUnverifiedSpecialCardsToPlayerOne(HandManager handManager)
