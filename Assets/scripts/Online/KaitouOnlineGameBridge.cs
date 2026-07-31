@@ -610,16 +610,16 @@ namespace KaitouOnline
                 if (request.action == "action_placement_ready")
                 {
                     OnlineSeatChoice ready = Protocol.Parse<OnlineSeatChoice>(request.data);
-                    int currentDay = HandManager.Instance != null
+                    int placementCurrentDay = HandManager.Instance != null
                         ? HandManager.Instance.CurrentDay : 1;
-                    if (ready.day != currentDay) return;
+                    if (ready.day != placementCurrentDay) return;
                     placementReadySeats.Add(envelope.senderSeat);
                     Debug.Log($"<color=#70E8FF>【伏せ配置完了】P{envelope.senderSeat + 1} " +
                               $"({placementReadySeats.Count}/{session.RoomPlayerCount})</color>");
                     if (placementReadySeats.Count >= session.RoomPlayerCount)
                     {
                         session.Send(MessageType.RevealActions, -1,
-                            Protocol.Json(new OnlineSeatChoice { day = currentDay }));
+                            Protocol.Json(new OnlineSeatChoice { day = placementCurrentDay }));
                     }
                     return;
                 }
