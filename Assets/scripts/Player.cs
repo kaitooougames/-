@@ -17,6 +17,7 @@ public class Player : MonoBehaviour
     private GameObject penaltyCardObj;  // クラスのメンバ変数として宣言
     private ArrestEffect activeArrestEffect; // 現在の逮捕エフェクト
     private List<ArrestPenaltyCard> PenaltyCards1 = new List<ArrestPenaltyCard>(); // 🔹 このクラスで生成したペナルティカードを管理
+    private bool penaltyCardCreatedThisTurn;
     private List<CardInteraction> selectableCards = new List<CardInteraction>();
     public List<CardInteraction> playerCards; // 相手のカードリスト
     public bool isEliminated = false; // 🔸 脱落フラグを追加
@@ -188,6 +189,7 @@ public class Player : MonoBehaviour
             ArrestPenaltyCard penaltyCard = Instantiate(arrestPenaltyCardPrefab, startPosition, spawnRotation).GetComponent<ArrestPenaltyCard>();
 
             PenaltyCards1.Add(penaltyCard); // 🔹 生成したペナルティカードをリストに追加
+            penaltyCardCreatedThisTurn = true;
             penaltyCard.SetPenaltyState(true);
             penaltyCard.AnimateTo(spawnPosition);
 
@@ -215,6 +217,7 @@ public class Player : MonoBehaviour
         hasCriminalRecord = false;
         isFirstOffense = false;
         hasAppliedPenalty = false;
+        penaltyCardCreatedThisTurn = false;
         HasBeenArrested = false;
     }
 
@@ -229,7 +232,7 @@ public class Player : MonoBehaviour
     {
         bool keepAdvanceNotice = SpecialActionCardSystem.IsAdvanceNoticePendingCard(0, SelectedCard);
    
-        if (hasCriminalRecord)
+        if (hasCriminalRecord && !penaltyCardCreatedThisTurn)
         {
             foreach (var penaltyCard in PenaltyCards1) // 🔹 生成したペナルティカードだけ裏返す
             {
@@ -244,6 +247,7 @@ public class Player : MonoBehaviour
         { ApplyPenalty(); }
 
         hasAppliedPenalty = false;
+        penaltyCardCreatedThisTurn = false;
         if (!keepAdvanceNotice && activeStealEffect != null)
         {
             Destroy(activeStealEffect.gameObject);
