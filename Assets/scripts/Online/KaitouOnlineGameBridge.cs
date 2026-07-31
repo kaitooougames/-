@@ -1076,16 +1076,15 @@ namespace KaitouOnline
 
             placementStarted = true;
             placementDay = snapshotDay;
-            WaitingMessage = "全員の行動カードを伏せて配置しています。";
-            StartCoroutine(ReportPlacementReadyWhenFinished(snapshotDay));
+            // 選択が揃った時点で残りの移動だけ完了させる。
+            // カード移動待ちで従来の開示テンポを遅くしない。
+            CompleteSelectedActionCardPlacement();
+            ReportPlacementReady(snapshotDay);
         }
 
-        private System.Collections.IEnumerator ReportPlacementReadyWhenFinished(int day)
+        private void ReportPlacementReady(int day)
         {
-            while (placementDay == day && AnySelectedActionCardMoving())
-                yield return null;
-
-            if (placementDay != day) yield break;
+            if (placementDay != day) return;
             session.SendAction(new ActionRequest
             {
                 action = "action_placement_ready",
@@ -1099,14 +1098,12 @@ namespace KaitouOnline
             WaitingMessage = "相手の行動カード配置を待っています。";
         }
 
-        private static bool AnySelectedActionCardMoving()
+        private static void CompleteSelectedActionCardPlacement()
         {
             Player player = Object.FindFirstObjectByType<Player>();
-            if (player != null && player.SelectedCard != null &&
-                player.SelectedCard.IsMoving) return true;
+            player?.SelectedCard?.CompleteCurrentMoveImmediately();
             Player2 player2 = Object.FindFirstObjectByType<Player2>();
-            return player2 != null && player2.SelectedCard != null &&
-                   player2.SelectedCard.IsMoving;
+            player2?.SelectedCard?.CompleteCurrentMoveImmediately();
         }
 
         private void BeginSynchronizedReveal(int day)

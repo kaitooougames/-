@@ -37,7 +37,6 @@ public class CardInteraction : MonoBehaviour
     private const float HoverScale = 1.04f;
     private const float SelectedThiefScale = 1.08f;
     private bool isMoving = false;
-    public bool IsMoving => isMoving;
     private Vector3 targetPosition;
     private Quaternion targetRotation;
     private float moveSpeed = 5f;
@@ -327,6 +326,16 @@ public class CardInteraction : MonoBehaviour
         transform.position = newPosition;
         transform.rotation = originalRotation;
         transform.localScale = selectedHoverLocked ? originalScale * SelectedThiefScale : originalScale;
+        isMoving = false;
+    }
+
+    public void CompleteCurrentMoveImmediately()
+    {
+        if (!isMoving) return;
+        transform.position = targetPosition;
+        transform.rotation = targetRotation;
+        transform.localScale = selectedHoverLocked
+            ? originalScale * SelectedThiefScale : originalScale;
         isMoving = false;
     }
 
