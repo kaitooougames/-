@@ -77,6 +77,7 @@ namespace KaitouOnline
     [Serializable]
     public struct ActionCardChoice
     {
+        public int day;
         public int seat;
         public int specialEffect;
         public bool isExhibit;
@@ -88,6 +89,7 @@ namespace KaitouOnline
     [Serializable]
     public struct ActionSelectionState
     {
+        public int day;
         public ActionCardChoice[] choices;
     }
 
@@ -163,7 +165,7 @@ namespace KaitouOnline
     {
         // オンライン進行規約。古いMacビルドとの混在を防ぐため、
         // フェーズ同期方式を変更したら必ず更新する。
-        public const int Version = 2;
+        public const int Version = 3;
         public const string MessageName = "KaitouOnlineEvent";
 
         public static string Json<T>(T value) => JsonUtility.ToJson(value);

@@ -26,6 +26,9 @@ public class StealNumberEffect : MonoBehaviour
 
     public void ShowPrisonStatus()
     {
+        gameObject.SetActive(true);
+        numberText.gameObject.SetActive(true);
+        numberText.enabled = true;
         numberText.text = "IN PRISON";
         numberText.color = Color.white;
         numberText.fontSize = 14f;

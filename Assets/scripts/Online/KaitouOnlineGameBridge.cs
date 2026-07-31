@@ -492,6 +492,7 @@ namespace KaitouOnline
         {
             ActionCardChoice choice = new ActionCardChoice
             {
+                day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1,
                 seat = session.LocalSeat,
                 specialEffect = 0,
                 isExhibit = false,
@@ -604,6 +605,13 @@ namespace KaitouOnline
                 ActionCardChoice choice = Protocol.Parse<ActionCardChoice>(request.data);
                 choice.seat = envelope.senderSeat;
                 if (choice.seat < 0 || choice.seat >= session.RoomPlayerCount) return;
+                int currentDay = HandManager.Instance != null
+                    ? HandManager.Instance.CurrentDay : 1;
+                if (choice.day != currentDay)
+                {
+                    Debug.LogWarning($"【オンライン選択破棄】受信:{choice.day}日目 / 現在:{currentDay}日目");
+                    return;
+                }
                 hostChoices[choice.seat] = choice;
                 Debug.Log($"【オンライン選択受信】P{choice.seat + 1}：{CardLabel(choice)}");
                 if (hostChoices.Count >= session.RoomPlayerCount) BroadcastReady();
@@ -615,7 +623,7 @@ namespace KaitouOnline
                 ActionSelectionState state =
                     Protocol.Parse<ActionSelectionState>(envelope.payload);
                 if (state.choices == null || state.choices.Length == 0) return;
-                ApplyReadyChoices(state.choices);
+                ApplyReadyChoices(state.day, state.choices);
                 return;
             }
 
@@ -990,16 +998,32 @@ namespace KaitouOnline
 
         private void BroadcastReady()
         {
+            int day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1;
             var ordered = new ActionCardChoice[session.RoomPlayerCount];
             for (int seat = 0; seat < ordered.Length; seat++)
-                if (!hostChoices.TryGetValue(seat, out ordered[seat])) return;
+                if (!hostChoices.TryGetValue(seat, out ordered[seat]) ||
+                    ordered[seat].day != day) return;
             session.Send(MessageType.StateSnapshot, -1,
-                Protocol.Json(new ActionSelectionState { choices = ordered }));
+                Protocol.Json(new ActionSelectionState { day = day, choices = ordered }));
         }
 
-        private void ApplyReadyChoices(ActionCardChoice[] choices)
+        private void ApplyReadyChoices(int snapshotDay, ActionCardChoice[] choices)
         {
             if (revealStarted) return;
+            int currentDay = HandManager.Instance != null
+                ? HandManager.Instance.CurrentDay : 1;
+            if (snapshotDay != currentDay || choices == null ||
+                choices.Length == 0)
+            {
+                Debug.LogWarning($"【オンライン開示破棄】受信:{snapshotDay}日目 / 現在:{currentDay}日目");
+                return;
+            }
+            foreach (ActionCardChoice choice in choices)
+                if (choice.day != snapshotDay)
+                {
+                    Debug.LogWarning("【オンライン開示破棄】選択データ内の日番号が一致しません。");
+                    return;
+                }
             foreach (ActionCardChoice choice in choices)
             {
                 if (choice.seat == session.LocalSeat) continue;
@@ -1030,6 +1054,7 @@ namespace KaitouOnline
         private static ActionCardChoice Describe(CardInteraction card, int seat, int number) =>
             new ActionCardChoice
             {
+                day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1,
                 seat = seat,
                 specialEffect = (int)card.specialEffect,
                 isExhibit = card.isExhibit,

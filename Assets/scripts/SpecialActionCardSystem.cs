@@ -214,7 +214,6 @@ public static class SpecialActionCardSystem
 
         SpecialActionEffect[] effects =
         {
-            SpecialActionEffect.FrameUp,
             SpecialActionEffect.SoloStage,
             SpecialActionEffect.BlackoutModule,
             SpecialActionEffect.Watchdog,
@@ -533,7 +532,9 @@ public static class SpecialActionCardSystem
             effect = (SpecialActionEffect)Random.Range(
                 1, (int)SpecialActionEffect.AdvanceNotice + 1);
         }
-        while ((effect == SpecialActionEffect.SoloStage && soloStageCreated) ||
+        while ((KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession &&
+                effect == SpecialActionEffect.FrameUp) ||
+               (effect == SpecialActionEffect.SoloStage && soloStageCreated) ||
                (effect == SpecialActionEffect.Watchdog && watchdogCreated) ||
                (effect == SpecialActionEffect.AdvanceNotice && advanceNoticeCreated));
         return effect;

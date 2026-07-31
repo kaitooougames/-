@@ -592,10 +592,10 @@ public class CameraController : MonoBehaviour
     {
         Vector3[] markerPositions =
         {
-            new Vector3(0.7f, 0f, -1.17f),
-            new Vector3(-0.7f, 0f, 1.17f),
-            new Vector3(-1.8f, 0f, 0f),
-            new Vector3(1.8f, 0f, 0f)
+            new Vector3(0.7f, 0.025f, -1.17f),
+            new Vector3(-0.7f, 0.025f, 1.17f),
+            new Vector3(-1.8f, 0.025f, 0f),
+            new Vector3(1.8f, 0.025f, 0f)
         };
 
         for (int seat = 0; seat < markerPositions.Length; seat++)
