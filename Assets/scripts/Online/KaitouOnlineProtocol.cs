@@ -11,6 +11,7 @@ namespace KaitouOnline
         StartGame,
         ActionRequest,
         StateSnapshot,
+        RevealActions,
         SecurityDiceState,
         TreasureDisplayChoice,
         TreasureStealChoice,
@@ -165,7 +166,7 @@ namespace KaitouOnline
     {
         // オンライン進行規約。古いMacビルドとの混在を防ぐため、
         // フェーズ同期方式を変更したら必ず更新する。
-        public const int Version = 5;
+        public const int Version = 6;
         public const string MessageName = "KaitouOnlineEvent";
 
         public static string Json<T>(T value) => JsonUtility.ToJson(value);
