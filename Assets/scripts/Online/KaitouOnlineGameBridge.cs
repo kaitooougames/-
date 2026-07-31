@@ -1021,29 +1021,10 @@ namespace KaitouOnline
 
             revealStarted = true;
             WaitingMessage = "";
-            StartCoroutine(RevealActionsAfterPlacement());
-            Debug.Log("<color=#70E8FF>【オンライン】全員の行動選択が揃いました。一斉開示します。</color>");
-        }
-
-        private System.Collections.IEnumerator RevealActionsAfterPlacement()
-        {
-            // 秒数固定では後半の遠い手札が間に合わないため、実際の移動完了を待つ。
-            float timeout = Time.time + 3f;
-            while (Time.time < timeout)
-            {
-                Player local = Object.FindFirstObjectByType<Player>();
-                Player2 remote = Object.FindFirstObjectByType<Player2>();
-                bool moving = local != null && local.SelectedCard != null &&
-                              local.SelectedCard.IsMoving;
-                moving |= remote != null && remote.SelectedCard != null &&
-                          remote.SelectedCard.IsMoving;
-                if (!moving) break;
-                yield return null;
-            }
-            yield return new WaitForSeconds(0.12f);
             CameraController cameraController =
                 Camera.main != null ? Camera.main.GetComponent<CameraController>() : null;
             cameraController?.MoveCamera();
+            Debug.Log("<color=#70E8FF>【オンライン】全員の行動選択が揃いました。一斉開示します。</color>");
         }
 
         private static ActionCardChoice Describe(CardInteraction card, int seat, int number) =>

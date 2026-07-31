@@ -234,6 +234,11 @@ public class Player3 : MonoBehaviour
     }
 
 
+    public void ClearFirstOffenseRestriction()
+    {
+        isFirstOffense = false;
+    }
+
     public void ResetPenaltyCards()
     {
         foreach (ArrestPenaltyCard penaltyCard in PenaltyCards3)

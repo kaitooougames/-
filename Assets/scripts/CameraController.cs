@@ -1175,6 +1175,8 @@ public class CameraController : MonoBehaviour
             }
             bool released =
                 SpecialActionCardSystem.ResolvePrisonReleaseRoll(seat, result);
+            if (released)
+                ClearFirstOffenseRestriction(seat);
             prisonRollMessage = released
                 ? $"Player{seat + 1}：{result}が出たため脱獄成功しました"
                 : $"Player{seat + 1}：{result}が出たため脱獄失敗しました";
@@ -1186,6 +1188,26 @@ public class CameraController : MonoBehaviour
         prisonRollSeat = -1;
         prisonRollMessage = "";
     }
+
+    private static void ClearFirstOffenseRestriction(int seat)
+    {
+        switch (seat)
+        {
+            case 0:
+                Object.FindFirstObjectByType<Player>()?.ClearFirstOffenseRestriction();
+                break;
+            case 1:
+                Object.FindFirstObjectByType<Player2>()?.ClearFirstOffenseRestriction();
+                break;
+            case 2:
+                Object.FindFirstObjectByType<Player3>()?.ClearFirstOffenseRestriction();
+                break;
+            case 3:
+                Object.FindFirstObjectByType<Player4>()?.ClearFirstOffenseRestriction();
+                break;
+        }
+    }
+
     private IEnumerator Wait()
     {
         TreasureGame.TreasureController treasureController =

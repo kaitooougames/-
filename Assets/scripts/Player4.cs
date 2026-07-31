@@ -237,6 +237,11 @@ public class Player4 : MonoBehaviour
             Debug.Log($"{name} に初犯のペナルティカードを表示しました。");
         }
     }
+    public void ClearFirstOffenseRestriction()
+    {
+        isFirstOffense = false;
+    }
+
     public void ResetPenaltyCards()
     {
         foreach (ArrestPenaltyCard penaltyCard in PenaltyCards4)
