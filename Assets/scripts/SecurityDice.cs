@@ -75,7 +75,7 @@ public class SecurityDice : MonoBehaviour
     }
 
 
-    public void RollDice(List<Player> players)
+    public void RollDice(List<Player> players, int forcedResult = 0)
     {
         pendingDiceArrests.Clear();
         if (HasUnarrestedSelectedEffect(SpecialActionEffect.BlackoutModule))
@@ -98,7 +98,9 @@ public class SecurityDice : MonoBehaviour
             return; // 逮捕されていない怪盗がいなければサイコロを振らない
         }
 
-        rolledNumber = Random.Range(diceMin, diceMax + 1);
+        rolledNumber = forcedResult >= diceMin && forcedResult <= diceMax
+            ? forcedResult
+            : Random.Range(diceMin, diceMax + 1);
         // エフェクト開始！
         diceEffectController.StartDiceRoll(rolledNumber);
         Debug.Log($"警備サイコロの目: {rolledNumber}");

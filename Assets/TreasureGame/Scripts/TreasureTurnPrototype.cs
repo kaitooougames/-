@@ -98,6 +98,29 @@ public class TreasureTurnPrototype : MonoBehaviour
             GUI.Label(instructionRect, treasureController.InstructionText, instructionStyle);
         }
 
+        if (treasureController != null &&
+            treasureController.Phase == TreasurePhase.GameOver &&
+            KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+        {
+            GUIStyle replayStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = Mathf.RoundToInt(22f * uiScale),
+                fontStyle = FontStyle.Bold
+            };
+            bool host = KaitouOnline.KaitouOnlineSession.Instance != null &&
+                        KaitouOnline.KaitouOnlineSession.Instance.IsHost;
+            GUI.enabled = host;
+            Rect replayRect = new Rect(
+                (Screen.width - 260f * uiScale) * 0.5f,
+                Screen.height * 0.72f,
+                260f * uiScale, 58f * uiScale);
+            if (GUI.Button(replayRect,
+                    host ? "もう一度遊ぶ" : "ホストの再戦操作を待っています",
+                    replayStyle))
+                KaitouOnline.KaitouOnlineGameBridge.RequestRestartGame();
+            GUI.enabled = true;
+        }
+
         bool canStart = !turnRunning &&
             (treasureController == null || treasureController.Phase == TreasurePhase.Waiting);
         GUI.enabled = canStart;

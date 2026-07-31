@@ -30,6 +30,9 @@ public class TreasureController : MonoBehaviour
     private readonly List<RobberyDeclaration> robberies = new List<RobberyDeclaration>();
     private readonly List<Treasure> stolenThisRobbery = new List<Treasure>();
     private readonly Dictionary<Player, List<Treasure>> stolenByRobber = new Dictionary<Player, List<Treasure>>();
+    // 今ターン盗んだカードと盗んだ本人。展示完了まで本人のほかの手札を暗くする。
+    private readonly HashSet<Treasure> stolenFocusCards = new HashSet<Treasure>();
+    private Player stolenFocusOwner;
     private readonly Dictionary<Player, Dictionary<Player, int>> stolenCountsByVictim =
         new Dictionary<Player, Dictionary<Player, int>>();
     private readonly Dictionary<Player, List<Treasure>> robberDisplaySelections = new Dictionary<Player, List<Treasure>>();
@@ -59,6 +62,7 @@ public class TreasureController : MonoBehaviour
     private bool freeMoveInProgress;
     private bool endTurnAfterCurrentDisplay;
     private bool arrestRewardDisplayActive;
+    private int nextTreasureNetworkId;
     private string gameResultText = string.Empty;
     public TreasurePhase Phase { get; private set; } = TreasurePhase.Waiting;
     public int PlayerCount => playerCount;
@@ -94,6 +98,9 @@ public class TreasureController : MonoBehaviour
         get
         {
             if (Phase == TreasurePhase.GameOver) return gameResultText;
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession &&
+                !string.IsNullOrEmpty(KaitouOnline.KaitouOnlineGameBridge.PriorityMessage))
+                return KaitouOnline.KaitouOnlineGameBridge.PriorityMessage;
             if (FreeInteractionMode) return "FREEモード：手札を押すと展示、展示品を押すとPlayer1の手札へ戻ります。";
             if (Phase == TreasurePhase.SelectingDisplays)
             {
@@ -106,16 +113,30 @@ public class TreasureController : MonoBehaviour
                         ? $"檻の逮捕報酬により、展示する宝をあと{remaining}つ選んでください。"
                         : $"展示する宝をあと{remaining}つ選んでください。";
                 }
+                if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+                {
+                    Player waiting = displayPlayers.Find(p =>
+                        displaySelections.TryGetValue(p, out List<Treasure> cards) &&
+                        cards.Count < requiredDisplayCounts[p]);
+                    if (waiting != null)
+                        return $"{OnlinePlayerLabel(waiting)}が展示する宝を選んでいます。";
+                }
                 return string.Empty;
             }
             if (Phase == TreasurePhase.Robbing)
                 return ActiveRobber != null && ActiveRobber.PlayerId == 0
                     ? $"他の展示室から宝をあと{stealsRemaining}つ盗んでください。"
-                    : string.Empty;
+                    : ActiveRobber != null &&
+                      KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession
+                        ? $"{OnlinePlayerLabel(ActiveRobber)}が怪盗中です。"
+                        : string.Empty;
             if (Phase == TreasurePhase.Inspecting)
                 return analysisRobber != null && analysisRobber.PlayerId == 0
                     ? $"分析メガネ：真贋を確認する宝をあと{Mathf.Max(0, requiredAnalysisCount - analysisSelections.Count)}つ選んでください。"
-                    : string.Empty;
+                    : analysisRobber != null &&
+                      KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession
+                        ? $"{OnlinePlayerLabel(analysisRobber)}が分析メガネを使用中です。"
+                        : string.Empty;
             if (Phase == TreasurePhase.RobberDisplay)
             {
                 Player playerOne = players.Count > 0 ? players[0] : null;
@@ -127,11 +148,21 @@ public class TreasureController : MonoBehaviour
                     if (remaining > 0)
                         return $"盗んだ宝から、展示する宝をあと{remaining}つ選んでください。";
                 }
+                if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+                {
+                    Player waiting = new List<Player>(stolenByRobber.Keys).Find(p =>
+                        !robberDisplaySelections.TryGetValue(p, out List<Treasure> cards) ||
+                        cards.Count < RequiredRobberDisplayCount(p));
+                    if (waiting != null)
+                        return $"{OnlinePlayerLabel(waiting)}が盗品から展示する宝を選んでいます。";
+                }
                 return string.Empty;
             }
             if (Phase == TreasurePhase.Displaying) return string.Empty;
             if (Phase == TreasurePhase.EndingTurn) return string.Empty;
-            return string.Empty;
+            return KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession
+                ? KaitouOnline.KaitouOnlineGameBridge.WaitingMessage
+                : string.Empty;
         }
     }
 
@@ -239,6 +270,20 @@ public class TreasureController : MonoBehaviour
         RefreshInteraction();
     }
 
+    public int[] GetDisplayedTreasureNetworkOrder(int playerId)
+    {
+        return ValidPlayer(playerId)
+            ? players[playerId].GetDisplayedTreasureNetworkOrder()
+            : System.Array.Empty<int>();
+    }
+
+    public void ApplyOnlineAppraiserOrder(int networkSeat, int[] treasureIds)
+    {
+        int localIndex = LocalPlayerIndexForNetworkSeat(networkSeat);
+        if (!ValidPlayer(localIndex)) return;
+        players[localIndex].ApplyDisplayedTreasureNetworkOrder(treasureIds);
+    }
+
     public IEnumerator RedisplayAppraisedTreasures(IEnumerable<Treasure> cards)
     {
         if (cards == null) yield break;
@@ -325,6 +370,12 @@ public class TreasureController : MonoBehaviour
         foreach (Treasure t in FindObjectsByType<Treasure>(FindObjectsSortMode.None)) t.gameObject.SetActive(false);
         SetupGame(playerCount);
         if (demoSelectAllPlayersOnStart) BeginDisplayPhase(new[] { 0, 1, 2, 3 });
+    }
+
+    // オンラインのシーン読込直後、Startで山札を作る前に人数だけ確定する。
+    public void PreparePlayerCount(int newPlayerCount)
+    {
+        playerCount = Mathf.Clamp(newPlayerCount, 2, 4);
     }
 
     public void RestartWithPlayerCount(int newPlayerCount)
@@ -441,6 +492,7 @@ public class TreasureController : MonoBehaviour
         Phase = TreasurePhase.SelectingDisplays;
         Debug.Log($"<color=#FFD966>【展示選択】{DisplayRequirementList()}。全員決定後に同時展示します。</color>");
         RefreshInteraction();
+        KaitouOnline.KaitouOnlineGameBridge.ReplayDisplayChoices();
     }
 
     // 脱落者処理：指定プレイヤーの残り手札を、選択なしで全て同時展示する。
@@ -541,6 +593,12 @@ public class TreasureController : MonoBehaviour
         }
         if (Phase == TreasurePhase.SelectingDisplays)
         {
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                card.SetInteractable(false);
+                KaitouOnline.KaitouOnlineGameBridge.SubmitDisplayTreasure(card);
+                return;
+            }
             List<Treasure> selected = displaySelections[card.Owner];
             if (!selected.Contains(card)) selected.Add(card);
             if (optionalRelicDoubleDisplayPlayers.Contains(card.Owner) &&
@@ -550,9 +608,24 @@ public class TreasureController : MonoBehaviour
             card.SetInteractable(false);
             if (AllDisplaySelectionsComplete()) StartCoroutine(ResolveDisplays());
         }
-        else if (Phase == TreasurePhase.Robbing) StartCoroutine(Steal(card));
+        else if (Phase == TreasurePhase.Robbing)
+        {
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                card.SetInteractable(false);
+                KaitouOnline.KaitouOnlineGameBridge.SubmitStealTreasure(card);
+                return;
+            }
+            StartCoroutine(Steal(card));
+        }
         else if (Phase == TreasurePhase.Inspecting)
         {
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                card.SetInteractable(false);
+                KaitouOnline.KaitouOnlineGameBridge.SubmitAnalysisTreasure(card);
+                return;
+            }
             analysisSelections.Add(card);
             card.AnimateFlipToFaceUp(0.35f);
             Debug.Log($"【分析メガネ】P{analysisRobber.PlayerId + 1}：{analysisSelections.Count}/{requiredAnalysisCount}枚確認");
@@ -563,6 +636,21 @@ public class TreasureController : MonoBehaviour
             }
         }
         else if (Phase == TreasurePhase.RobberDisplay)
+        {
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                card.SetInteractable(false);
+                KaitouOnline.KaitouOnlineGameBridge.SubmitRobberDisplayTreasure(card);
+                return;
+            }
+            ApplyRobberDisplayChoice(card);
+        }
+        RefreshInteraction();
+    }
+
+    private void ApplyRobberDisplayChoice(Treasure card)
+    {
+        if (card == null) return;
         {
             if (!robberDisplaySelections.TryGetValue(card.Owner, out List<Treasure> selected))
             {
@@ -575,7 +663,90 @@ public class TreasureController : MonoBehaviour
             card.SetInteractable(false);
             if (AllRobberDisplaySelectionsComplete()) StartCoroutine(ResolveRobberDisplays());
         }
+    }
+
+    public void ApplyOnlineRobberDisplayChoice(int actorSeat, int treasureId)
+    {
+        if (Phase != TreasurePhase.RobberDisplay) return;
+        Treasure card = allTreasures.Find(value =>
+            value != null && value.NetworkId == treasureId);
+        if (card == null || card.Owner == null ||
+            NetworkSeatForLocalPlayerIndex(card.Owner.PlayerId) != actorSeat ||
+            !CanInteract(card))
+        {
+            Debug.LogWarning($"【オンライン怪盗展示】宝ID {treasureId} を展示できません。");
+            return;
+        }
+        ApplyRobberDisplayChoice(card);
         RefreshInteraction();
+    }
+
+    public void ApplyOnlineDisplayChoice(int treasureId)
+    {
+        if (Phase != TreasurePhase.SelectingDisplays) return;
+        Treasure card = allTreasures.Find(value =>
+            value != null && value.NetworkId == treasureId);
+        if (card == null || card.Owner == null ||
+            card.Location != TreasureLocation.Hand ||
+            !displaySelections.TryGetValue(card.Owner, out List<Treasure> selected))
+        {
+            Debug.LogWarning($"【オンライン展示】宝ID {treasureId} を現在の展示対象へ適用できません。");
+            return;
+        }
+        if (selected.Contains(card)) return;
+        selected.Add(card);
+        if (optionalRelicDoubleDisplayPlayers.Contains(card.Owner) &&
+            selected.Count == 1 && card.Type != TreasureType.Relic)
+            requiredDisplayCounts[card.Owner] = 1;
+        card.SetInteractable(false);
+        Debug.Log($"<color=#70E8FF>【オンライン展示選択適用】" +
+                  $"seat={card.NetworkOwnerSeat} treasure={treasureId}</color>");
+        if (AllDisplaySelectionsComplete()) StartCoroutine(ResolveDisplays());
+        else RefreshInteraction();
+    }
+
+    public void ApplyOnlineStealChoice(int actorSeat, int treasureId)
+    {
+        if (Phase != TreasurePhase.Robbing || ActiveRobber == null) return;
+        int activeSeat = NetworkSeatForLocalPlayerIndex(ActiveRobber.PlayerId);
+        if (activeSeat != actorSeat)
+        {
+            Debug.LogWarning($"【オンライン怪盗】手番外の選択を拒否しました。" +
+                             $"actor={actorSeat} active={activeSeat}");
+            return;
+        }
+        Treasure card = allTreasures.Find(value =>
+            value != null && value.NetworkId == treasureId);
+        if (card == null || !CanStealCard(card))
+        {
+            Debug.LogWarning($"【オンライン怪盗】宝ID {treasureId} は盗めません。");
+            return;
+        }
+        StartCoroutine(Steal(card));
+    }
+
+    public void ApplyOnlineAnalysisChoice(int actorSeat, int treasureId)
+    {
+        if (Phase != TreasurePhase.Inspecting || analysisRobber == null ||
+            analysisResolving) return;
+        int activeSeat = NetworkSeatForLocalPlayerIndex(analysisRobber.PlayerId);
+        if (activeSeat != actorSeat) return;
+        Treasure card = allTreasures.Find(value =>
+            value != null && value.NetworkId == treasureId);
+        if (card == null || card.Location != TreasureLocation.Display ||
+            card.Owner == analysisRobber || analysisSelections.Contains(card) ||
+            analysisSelections.Count >= requiredAnalysisCount) return;
+
+        analysisSelections.Add(card);
+        // 真贋を見られるのは分析者本人だけ。他の画面では選択位置のみ明るくする。
+        if (analysisRobber.PlayerId == 0)
+            card.AnimateFlipToFaceUp(0.35f);
+        RefreshInteraction();
+        if (analysisSelections.Count >= requiredAnalysisCount)
+        {
+            analysisResolving = true;
+            StartCoroutine(FinishAnalysisInspection());
+        }
     }
 
     public bool CanInteract(Treasure card)
@@ -596,9 +767,9 @@ public class TreasureController : MonoBehaviour
                     selected.Count == 0 || card.Type == TreasureType.Relic)
                 && selected.Count < requiredDisplayCounts[card.Owner] && !selected.Contains(card);
         if (Phase == TreasurePhase.Robbing)
-            return card.Location == TreasureLocation.Display && card.Owner != ActiveRobber && stealsRemaining > 0
-                && (!robberyEffects.TryGetValue(ActiveRobber, out SpecialActionEffect effect) ||
-                    effect != SpecialActionEffect.Balloon || card.Type != TreasureType.Gold);
+            return (!KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession ||
+                    ActiveRobber != null && ActiveRobber.PlayerId == 0) &&
+                CanStealCard(card);
         if (Phase == TreasurePhase.Inspecting)
             return !analysisResolving && analysisRobber != null && analysisRobber.PlayerId == 0 &&
                    card.Location == TreasureLocation.Display && card.Owner != analysisRobber &&
@@ -613,8 +784,18 @@ public class TreasureController : MonoBehaviour
         return false;
     }
 
+    private bool CanStealCard(Treasure card)
+    {
+        return card != null && ActiveRobber != null &&
+               card.Location == TreasureLocation.Display &&
+               card.Owner != ActiveRobber && stealsRemaining > 0 &&
+               (!robberyEffects.TryGetValue(ActiveRobber, out SpecialActionEffect effect) ||
+                effect != SpecialActionEffect.Balloon || card.Type != TreasureType.Gold);
+    }
+
     private IEnumerator ResolveDisplays()
     {
+        KaitouOnline.KaitouOnlineGameBridge.ClearDisplayChoiceQueue();
         Phase = TreasurePhase.Displaying; RefreshInteraction();
         yield return MoveSelectedCardsBelowScreen(displaySelections);
         foreach (var pair in displaySelections) RecordDisplayBatch(pair.Key, pair.Value);
@@ -708,6 +889,8 @@ public class TreasureController : MonoBehaviour
             ? previousCount + 1 : 1;
         oldOwner.RemoveDisplayed(card); // 他の展示品はここでは詰めない。
         ActiveRobber.AddToStock(card);
+        card.SetNetworkIdentity(card.NetworkId,
+            NetworkSeatForLocalPlayerIndex(ActiveRobber.PlayerId));
         if (ActiveRobber.PlayerId == 0 && !ActiveRobber.HandVisible)
             ActiveRobber.SetHandVisible(true, handSlideDuration);
         stolenThisRobbery.Add(card);
@@ -717,6 +900,10 @@ public class TreasureController : MonoBehaviour
             stolenByRobber.Add(ActiveRobber, stolen);
         }
         stolen.Add(card);
+        stolenFocusOwner = ActiveRobber;
+        stolenFocusCards.Add(card);
+        // 盗品リストへ入った瞬間に、盗品以外の手札を暗転させる。
+        RefreshInteraction();
         treasuresInTransit.Add(card);
         ActiveRobber.SortHandForLayout();
         ActiveRobber.EnsureCardVisible(card);
@@ -724,12 +911,16 @@ public class TreasureController : MonoBehaviour
         Quaternion slideRotation = card.transform.rotation;
         Vector3 slideTarget = GetRobberyDestination(ActiveRobber.PlayerId, card.transform.position.y);
         card.SetLocation(TreasureLocation.Hand);
+        // LocationがHandになってから再評価しないと、別ビルド側では暗転対象が
+        // 展示品のままと判定されるフレームが残る。
+        RefreshInteraction();
         card.AnimateTo(slideTarget, slideRotation, moveDuration);
         yield return new WaitForSeconds(moveDuration);
 
         // 手札へ到着してから初めて、他の手札と同じ表向き・角度・高さに揃える。
         card.SetFaceUp(true);
         card.MoveTo(p, r);
+        RefreshInteraction();
         ActiveRobber.AnimateHandLayout(moveDuration * 0.35f);
         yield return new WaitForSeconds(moveDuration * 0.35f);
         treasuresInTransit.Remove(card);
@@ -743,6 +934,7 @@ public class TreasureController : MonoBehaviour
         {
             Phase = TreasurePhase.Robbing;
             RefreshInteraction();
+            KaitouOnline.KaitouOnlineGameBridge.ReplayTreasureActionChoices();
         }
     }
 
@@ -785,6 +977,7 @@ public class TreasureController : MonoBehaviour
 
     private IEnumerator ResolveRobberDisplays()
     {
+        KaitouOnline.KaitouOnlineGameBridge.ClearRobberDisplayChoiceQueue();
         Phase = TreasurePhase.Displaying; RefreshInteraction();
         Debug.Log("<color=#FFD966>【怪盗後の同時展示】選択された盗品を一斉に展示します。</color>");
         yield return MoveSelectedCardsBelowScreen(robberDisplaySelections);
@@ -801,6 +994,9 @@ public class TreasureController : MonoBehaviour
             }
         }
         yield return new WaitForSeconds(moveDuration);
+        stolenFocusCards.Clear();
+        stolenFocusOwner = null;
+        RefreshInteraction();
         if (robberDisplaySelections.ContainsKey(players[0]) && players[0].HandVisible)
             players[0].SetHandVisible(false, handSlideDuration);
         ContinueToArrestRewardsOrEndTurn();
@@ -811,12 +1007,14 @@ public class TreasureController : MonoBehaviour
         stolenThisRobbery.Clear();
         if (robberyIndex >= robberies.Count)
         {
+            KaitouOnline.KaitouOnlineGameBridge.ClearStealChoiceQueue();
             if (stolenByRobber.Count == 0) { ContinueToArrestRewardsOrEndTurn(); return; }
             if (stolenByRobber.ContainsKey(players[0]) && !players[0].HandVisible)
                 players[0].SetHandVisible(true, handSlideDuration);
             Phase = TreasurePhase.RobberDisplay;
             Debug.Log($"<color=#FFD966>【怪盗後の展示選択】盗品から必要枚数を選んでください。バルーンは最大3枚、それ以外は1枚です。</color>");
             RefreshInteraction();
+            KaitouOnline.KaitouOnlineGameBridge.ReplayTreasureActionChoices();
             return;
         }
         if (robberyEffects.TryGetValue(ActiveRobber, out SpecialActionEffect pendingEffect) &&
@@ -846,6 +1044,7 @@ public class TreasureController : MonoBehaviour
         Phase = TreasurePhase.Robbing;
         Debug.Log($"<color=#FF9F70>【怪盗中】プレイヤー{ActiveRobber.PlayerId + 1}：{stealsRemaining}枚盗んでください。</color>");
         RefreshInteraction();
+        KaitouOnline.KaitouOnlineGameBridge.ReplayTreasureActionChoices();
     }
 
     private IEnumerator BeginAnalysisInspection(Player robber)
@@ -870,9 +1069,11 @@ public class TreasureController : MonoBehaviour
 
         Phase = TreasurePhase.Inspecting;
         RefreshInteraction();
+        KaitouOnline.KaitouOnlineGameBridge.ReplayTreasureActionChoices();
         Debug.Log($"<color=#70E8FF>【分析メガネ】P{robber.PlayerId + 1}が展示品{requiredAnalysisCount}枚を確認します。</color>");
 
-        if (robber.PlayerId != 0)
+        if (robber.PlayerId != 0 &&
+            !KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
         {
             while (analysisSelections.Count < requiredAnalysisCount && candidates.Count > 0)
             {
@@ -946,7 +1147,92 @@ public class TreasureController : MonoBehaviour
             }
         }
         yield return new WaitForSeconds(moveDuration);
-        if (!EvaluateVictory()) BeginTurn();
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+        {
+            int day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1;
+            KaitouOnline.VictoryResolutionState state =
+                KaitouOnline.KaitouOnlineSession.Instance != null &&
+                KaitouOnline.KaitouOnlineSession.Instance.IsHost
+                    ? BuildOnlineVictoryResolution(day)
+                    : new KaitouOnline.VictoryResolutionState { day = day };
+            KaitouOnline.KaitouOnlineGameBridge.BeginVictoryResolution(state);
+            while (KaitouOnline.KaitouOnlineGameBridge.IsWaitingForVictoryResolution(day))
+                yield return null;
+        }
+        else if (!EvaluateVictory()) BeginTurn();
+    }
+
+    public KaitouOnline.VictoryResolutionState BuildOnlineVictoryResolution(int day)
+    {
+        var reachedPlayers = new List<Player>();
+        var survivors = new List<Player>();
+        for (int i = 0; i < playerCount; i++)
+            if (!eliminatedPlayerIds.Contains(players[i].PlayerId))
+                survivors.Add(players[i]);
+        if (playerCount > 1 && survivors.Count == 1)
+            reachedPlayers.Add(survivors[0]);
+
+        for (int i = 0; i < playerCount; i++)
+        {
+            Player player = players[i];
+            if (reachedPlayers.Contains(player)) continue;
+            if (VictoryScore(player) >= 7 &&
+                !eliminatedPlayerIds.Contains(player.PlayerId) &&
+                !blockedFromWinningThisTurn.Contains(player))
+                reachedPlayers.Add(player);
+        }
+        if (reachedPlayers.Count == 0)
+            return new KaitouOnline.VictoryResolutionState
+            {
+                day = day, gameOver = false,
+                winnerSeats = System.Array.Empty<int>(),
+                revealSeats = System.Array.Empty<int>()
+            };
+
+        Player best = reachedPlayers[0];
+        for (int i = 1; i < reachedPlayers.Count; i++)
+            if (CompareVictoryPriority(reachedPlayers[i], best) > 0) best = reachedPlayers[i];
+        var winners = reachedPlayers.FindAll(player =>
+            CompareVictoryPriority(player, best) == 0);
+        return new KaitouOnline.VictoryResolutionState
+        {
+            day = day,
+            gameOver = true,
+            winnerSeats = winners.ConvertAll(player =>
+                NetworkSeatForLocalPlayerIndex(player.PlayerId)).ToArray(),
+            revealSeats = reachedPlayers.ConvertAll(player =>
+                NetworkSeatForLocalPlayerIndex(player.PlayerId)).ToArray()
+        };
+    }
+
+    public void ApplyOnlineVictoryResolution(KaitouOnline.VictoryResolutionState state)
+    {
+        if (!state.gameOver)
+        {
+            BeginTurn();
+            return;
+        }
+        var reachedPlayers = new List<Player>();
+        if (state.revealSeats != null)
+            foreach (int seat in state.revealSeats)
+            {
+                int localIndex = LocalPlayerIndexForNetworkSeat(seat);
+                if (ValidPlayer(localIndex)) reachedPlayers.Add(players[localIndex]);
+            }
+        string[] labels = state.winnerSeats == null
+            ? System.Array.Empty<string>()
+            : System.Array.ConvertAll(state.winnerSeats, seat => $"Player{seat + 1}");
+        gameResultText = labels.Length <= 1
+            ? $"{(labels.Length == 1 ? labels[0] : "Player")}の勝利！"
+            : $"{string.Join("・", labels)}の引き分け勝利！";
+        Phase = TreasurePhase.GameOver;
+        RefreshInteraction();
+        int localNetworkSeat = NetworkSeatForLocalPlayerIndex(0);
+        if (state.winnerSeats != null &&
+            System.Array.IndexOf(state.winnerSeats, localNetworkSeat) >= 0)
+            ShowLocalWinnerDisplay();
+        StartCoroutine(RevealVictoryDisplays(reachedPlayers));
+        Debug.Log($"<color=#FFD700>【オンラインゲーム終了】{gameResultText}</color>");
     }
 
     private void ContinueToArrestRewardsOrEndTurn()
@@ -991,6 +1277,13 @@ public class TreasureController : MonoBehaviour
     private bool EvaluateVictory()
     {
         var reachedPlayers = new List<Player>();
+        var survivors = new List<Player>();
+        for (int i = 0; i < playerCount; i++)
+            if (!eliminatedPlayerIds.Contains(players[i].PlayerId))
+                survivors.Add(players[i]);
+        if (playerCount > 1 && survivors.Count == 1)
+            reachedPlayers.Add(survivors[0]);
+
         for (int i = 0; i < playerCount; i++)
         {
             Player player = players[i];
@@ -998,6 +1291,7 @@ public class TreasureController : MonoBehaviour
             Debug.Log($"【勝利判定】P{player.PlayerId + 1}：本物換算{score}点" +
                 (eliminatedPlayerIds.Contains(player.PlayerId) ? "（脱落・勝利対象外）" :
                  blockedFromWinningThisTurn.Contains(player) ? "（今ターンは勝利不可）" : ""));
+            if (reachedPlayers.Contains(player)) continue;
             if (score >= 7 && !eliminatedPlayerIds.Contains(player.PlayerId) &&
                 !blockedFromWinningThisTurn.Contains(player)) reachedPlayers.Add(player);
         }
@@ -1018,9 +1312,22 @@ public class TreasureController : MonoBehaviour
             : $"{string.Join("・", winnerLabels)}の引き分け勝利！";
         Phase = TreasurePhase.GameOver;
         RefreshInteraction();
+        if (finalWinners.Contains(players[0])) ShowLocalWinnerDisplay();
         StartCoroutine(RevealVictoryDisplays(reachedPlayers));
         Debug.Log($"<color=#FFD700>【ゲーム終了】{gameResultText}</color>");
         return true;
+    }
+
+    public bool EvaluateVictoryNow() => EvaluateVictory();
+
+    private void ShowLocalWinnerDisplay()
+    {
+        HandManager.Instance?.SetActionHandVisible(false);
+        SetPlayerOneHandVisible(false);
+        RevealPlayerDisplay(0);
+        CameraController cameraController =
+            Object.FindFirstObjectByType<CameraController>();
+        cameraController?.SetPlayerDisplayView(true);
     }
 
     private IEnumerator RevealVictoryDisplays(List<Player> reachedPlayers)
@@ -1092,15 +1399,17 @@ public class TreasureController : MonoBehaviour
         bool playerOneRobbing = Phase == TreasurePhase.Robbing && ActiveRobber == playerOne;
         bool analysisActive = Phase == TreasurePhase.Inspecting &&
                               analysisRobber != null;
-        List<Treasure> playerOneStolenCards = null;
-        bool playerOneHasPendingStolenDisplay = playerOne != null &&
-            stolenByRobber.TryGetValue(playerOne, out playerOneStolenCards) &&
-            playerOneStolenCards.Count > 0 &&
-            (!robberDisplaySelections.TryGetValue(playerOne, out List<Treasure> robberSelected) ||
-             robberSelected.Count < RequiredRobberDisplayCount(playerOne));
+        bool hasPendingStolenDisplay = stolenFocusOwner != null &&
+            stolenFocusCards.Count > 0;
 
         foreach (Treasure treasure in allTreasures)
         {
+            bool selectedForDisplay = Phase == TreasurePhase.SelectingDisplays &&
+                treasure.Location == TreasureLocation.Hand &&
+                treasure.Owner != null &&
+                displaySelections.TryGetValue(treasure.Owner,
+                    out List<Treasure> ownerDisplaySelections) &&
+                ownerDisplaySelections.Contains(treasure);
             bool selectedForAnalysis = analysisSelections.Contains(treasure);
             bool forceAnalysisDim = false;
             if (analysisActive && treasure.Location == TreasureLocation.Display)
@@ -1118,7 +1427,12 @@ public class TreasureController : MonoBehaviour
                     forceAnalysisDim = !selectedForAnalysis;
                 }
             }
-            treasure.SetForcedDim(forceAnalysisDim);
+            bool forceNonStolenHandDim = hasPendingStolenDisplay &&
+                treasure.Owner == stolenFocusOwner &&
+                treasure.Location == TreasureLocation.Hand &&
+                !stolenFocusCards.Contains(treasure);
+            treasure.SetForcedDim(forceAnalysisDim || forceNonStolenHandDim ||
+                                  selectedForDisplay);
             bool visibleToPlayerOne = FreeInteractionMode || treasuresInTransit.Contains(treasure) ||
                 treasure.Location == TreasureLocation.Display ||
                 (treasure.Owner != null && treasure.Owner.PlayerId == 0);
@@ -1134,17 +1448,16 @@ public class TreasureController : MonoBehaviour
                     stolenCards.Contains(treasure);
                 shouldDim = !canClick && !alreadyStolen;
             }
-            else if (playerOneHasPendingStolenDisplay)
+            else if (hasPendingStolenDisplay)
             {
-                bool isStolenCard = playerOneStolenCards.Contains(treasure);
-                bool alreadySelected = robberDisplaySelections.TryGetValue(playerOne, out List<Treasure> selectedStolen) &&
-                    selectedStolen.Contains(treasure);
-                shouldDim = treasure.Owner == playerOne && treasure.Location == TreasureLocation.Hand &&
-                    (!isStolenCard || alreadySelected);
+                bool isStolenCard = stolenFocusCards.Contains(treasure);
+                shouldDim = treasure.Owner == stolenFocusOwner && treasure.Location == TreasureLocation.Hand &&
+                    !isStolenCard;
             }
             treasure.SetInteractionState(canClick, shouldDim);
         }
     }
+
     private void LayoutImmediate() { for (int i = 0; i < playerCount; i++) players[i].LayoutCards(); RefreshInteraction(); }
     private bool ValidPlayer(int id) => id >= 0 && id < playerCount;
 
@@ -1204,6 +1517,7 @@ public class TreasureController : MonoBehaviour
 
     private void CreateDeck()
     {
+        nextTreasureNetworkId = 0;
         DealTypeRandomly(TreasureType.Gold, playerCount, 0);
         DealTypeRandomly(TreasureType.Painting, playerCount * 2, playerCount);
         DealTypeRandomly(TreasureType.Jewel, playerCount * 2, playerCount * 2);
@@ -1214,15 +1528,58 @@ public class TreasureController : MonoBehaviour
         var specs = new List<Spec>();
         for (int i=0;i<real;i++) specs.Add(new Spec(type, Authenticity.Real));
         for (int i=0;i<fake;i++) specs.Add(new Spec(type, Authenticity.Fake));
-        for (int i=specs.Count-1;i>0;i--) { int j=Random.Range(0,i+1); (specs[i],specs[j])=(specs[j],specs[i]); }
+        System.Random onlineRandom = null;
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession &&
+            KaitouOnline.KaitouOnlineSession.Instance != null)
+            onlineRandom = new System.Random(unchecked(
+                KaitouOnline.KaitouOnlineSession.Instance.GameSeed ^
+                ((int)type + 1) * 73856093));
+        for (int i = specs.Count - 1; i > 0; i--)
+        {
+            int j = onlineRandom != null
+                ? onlineRandom.Next(0, i + 1)
+                : Random.Range(0, i + 1);
+            (specs[i], specs[j]) = (specs[j], specs[i]);
+        }
         for (int i = 0; i < specs.Count; i++)
         {
-            Player owner = players[i % playerCount];
+            int networkOwnerSeat = i % playerCount;
+            int localOwnerIndex = LocalPlayerIndexForNetworkSeat(networkOwnerSeat);
+            Player owner = players[localOwnerIndex];
             Treasure card = CreateCard(specs[i], owner);
             if (card == null) continue;
+            card.SetNetworkIdentity(nextTreasureNetworkId++, networkOwnerSeat);
             owner.AddToStock(card);
             allTreasures.Add(card);
         }
+    }
+
+    private int LocalPlayerIndexForNetworkSeat(int networkSeat)
+    {
+        if (!KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession ||
+            KaitouOnline.KaitouOnlineSession.Instance == null)
+            return networkSeat;
+        int localSeat = KaitouOnline.KaitouOnlineSession.Instance.LocalSeat;
+        if (networkSeat == localSeat) return 0;
+        if (networkSeat == 0) return localSeat;
+        return networkSeat;
+    }
+
+    private int NetworkSeatForLocalPlayerIndex(int localPlayerIndex)
+    {
+        if (!KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession ||
+            KaitouOnline.KaitouOnlineSession.Instance == null)
+            return localPlayerIndex;
+        int localSeat = KaitouOnline.KaitouOnlineSession.Instance.LocalSeat;
+        if (localPlayerIndex == 0) return localSeat;
+        if (localPlayerIndex == localSeat) return 0;
+        return localPlayerIndex;
+    }
+
+    private string OnlinePlayerLabel(Player player)
+    {
+        return player == null ? "相手" :
+            $"Player{NetworkSeatForLocalPlayerIndex(player.PlayerId) + 1}";
     }
     private Treasure CreateCard(Spec spec, Player owner)
     {

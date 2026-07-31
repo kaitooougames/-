@@ -70,6 +70,32 @@ public class Player2 : MonoBehaviour
         card.SelectedNumber = 10;
     }
 
+    public void SelectOnlineCard(int specialEffect, bool exhibit, bool thief, bool cage,
+        int declaredNumber)
+    {
+        CardInteraction match = player2Cards.Find(card => card != null &&
+            (int)card.specialEffect == specialEffect &&
+            card.isExhibit == exhibit &&
+            card.isPhantomThief == thief &&
+            card.isCage == cage);
+        if (match == null)
+        {
+            Debug.LogError($"【オンライン】Player2の対応カードがありません。特殊:{specialEffect}");
+            return;
+        }
+        selectedCard = match;
+        SelectedNumber = thief ? declaredNumber : 0;
+        match.SelectedNumber = SelectedNumber;
+        SpecialActionCardSystem.NotifySelected(1, match);
+        match.MoveTo(new Vector3(0f, 0f, 1f), 2.5f);
+    }
+
+    public void SelectOnlinePass()
+    {
+        selectedCard = null;
+        SelectedNumber = 0;
+    }
+
     private void OnEnable()
     {
       

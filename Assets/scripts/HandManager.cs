@@ -409,6 +409,8 @@ public class HandManager : MonoBehaviour
             : $"ハニートラップ：Player{victimActionSeat + 1}が保有する通常行動カード全{heldCards.Count}枚{playedNote}";
         honeyTrapInspectionConfirmed = false;
         honeyTrapInspectionActive = true;
+        KaitouOnline.KaitouOnlineGameBridge.NotifyHoneyTrapInspection(
+            victimActionSeat, true);
         while (!honeyTrapInspectionConfirmed) yield return null;
         honeyTrapInspectionActive = false;
 
@@ -418,6 +420,8 @@ public class HandManager : MonoBehaviour
             card.MoveTo(storage, 7f);
         yield return new WaitForSeconds(0.5f);
         honeyTrapInspectionMessage = "";
+        KaitouOnline.KaitouOnlineGameBridge.NotifyHoneyTrapInspection(
+            victimActionSeat, false);
     }
 
     private static List<CardInteraction> GetActionCardsForSeat(int seat)
@@ -487,8 +491,13 @@ public class HandManager : MonoBehaviour
             allSpecialCardsButtonOffset.y,
             width, height);
         GUI.enabled = !cardSelected && !gameFinished;
-        if (GUI.Button(rect, "テスト：P1に特殊カード全種類", style))
-            SpecialActionCardSystem.GrantAllSpecialCardsToPlayerOne(this);
+        if (GUI.Button(rect, "テスト：未確認の特殊カード", style))
+        {
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+                KaitouOnline.KaitouOnlineGameBridge.RequestGrantAllSpecialCards();
+            else
+                SpecialActionCardSystem.GrantUnverifiedSpecialCardsToPlayerOne(this);
+        }
         GUI.enabled = true;
     }
 
@@ -634,7 +643,8 @@ public class HandManager : MonoBehaviour
         Debug.Log("カード選択: " + selectedCard.name);
 
         // **怪盗カードでなければカメラを移動**
-        if (!selectedCard.isPhantomThief)
+        if (!selectedCard.isPhantomThief &&
+            !KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
         {
             Camera.main.GetComponent<CameraController>().MoveCamera();
         }
@@ -662,7 +672,9 @@ public class HandManager : MonoBehaviour
         // 予告状は翌日の実行が終わるまで、ほかの行動手札を閉じたままにする。
         bool keepHandClosed = SpecialActionCardSystem.HasPendingAdvanceNotice(0);
         currentDay++;
-        actionHandVisible = !keepHandClosed;
+        KaitouOnline.KaitouOnlineGameBridge.PrepareNextActionDay();
+        actionHandVisible = !keepHandClosed &&
+            !SpecialActionCardSystem.IsImprisoned(0);
         cardSelected = false;
         activeSelectedCard = null;
         // Start()の再実行による瞬間移動は行わず、現在位置から手札へ戻す。

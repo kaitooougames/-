@@ -99,6 +99,33 @@ public class Player : MonoBehaviour
         second.AnimateToKeepingCurrentFace(secondPosition, secondRotation, duration);
     }
 
+    public int[] GetDisplayedTreasureNetworkOrder()
+    {
+        return displayedTreasures.ConvertAll(card =>
+            card != null ? card.NetworkId : -1).ToArray();
+    }
+
+    public void ApplyDisplayedTreasureNetworkOrder(int[] networkIds)
+    {
+        if (networkIds == null || networkIds.Length == 0) return;
+        var byId = new Dictionary<int, Treasure>();
+        foreach (Treasure card in displayedTreasures)
+            if (card != null) byId[card.NetworkId] = card;
+        var ordered = new List<Treasure>();
+        foreach (int id in networkIds)
+            if (byId.TryGetValue(id, out Treasure card))
+            {
+                ordered.Add(card);
+                byId.Remove(id);
+            }
+        foreach (Treasure card in displayedTreasures)
+            if (card != null && byId.ContainsKey(card.NetworkId))
+                ordered.Add(card);
+        displayedTreasures.Clear();
+        displayedTreasures.AddRange(ordered);
+        CompactDisplaySlots();
+    }
+
     public void ShuffleDisplayedType(TreasureType type, float duration)
     {
         var cards = displayedTreasures.FindAll(card => card != null && card.Type == type);

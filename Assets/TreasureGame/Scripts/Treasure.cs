@@ -30,12 +30,22 @@ public class Treasure : MonoBehaviour
     private bool dimWhenDisabled = true;
     private bool highlighted;
     private bool forcedDim;
+    private int networkId = -1;
+    private int networkOwnerSeat = -1;
 
     public TreasureType Type => type;
     public Authenticity Authenticity => authenticity;
     public TreasureLocation Location => location;
     public Player Owner => owner;
     public bool IsFaceUp => faceUp;
+    public int NetworkId => networkId;
+    public int NetworkOwnerSeat => networkOwnerSeat;
+
+    public void SetNetworkIdentity(int id, int ownerSeat)
+    {
+        networkId = id;
+        networkOwnerSeat = ownerSeat;
+    }
 
     public void Initialize(
         TreasureType treasureType,

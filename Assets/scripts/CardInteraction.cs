@@ -267,6 +267,7 @@ public class CardInteraction : MonoBehaviour
                     OnNumberSelected(10);
                     // 予告状を出した日から翌日の実行終了まで、ほかの行動手札は収納する。
                     handManager?.SetActionHandVisible(false);
+                    if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession) return;
                     // 通常の怪盗は数字パネル確定後にここを通るが、予告状は即決定で
                     // PerformClickを抜けるため、ほかのプレイヤー選択を明示的に開始する。
                     FindObjectOfType<Player2>()?.SelectRandomCard();
@@ -291,6 +292,13 @@ public class CardInteraction : MonoBehaviour
         }
 
         handManager.SelectCard(this); // ハンドUIの選択管理
+
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+        {
+            if (!isPhantomThief)
+                KaitouOnline.KaitouOnlineGameBridge.SubmitLocalAction(this, 0);
+            return;
+        }
 
         // 他のプレイヤーのランダムカード選択
         FindObjectOfType<Player2>()?.SelectRandomCard();
@@ -411,6 +419,9 @@ public class CardInteraction : MonoBehaviour
 
         selectedStealNumber = number;  // ✅ ここは怪盗カードだけが来るようになった
         MoveToCenter(player.SelectedNumber);
+
+        if (KaitouOnline.KaitouOnlineGameBridge.SubmitLocalAction(this, number))
+            return;
 
         CameraController cameraController = Camera.main.GetComponent<CameraController>();
         if (cameraController != null)

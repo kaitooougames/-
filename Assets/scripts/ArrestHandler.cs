@@ -15,6 +15,7 @@ public class ArrestHandler : MonoBehaviour
     private readonly HashSet<int> allCagePlayerIdsThisTurn = new HashSet<int>();
     private CardInteraction pendingFrameUpCard;
     private readonly List<CardInteraction> pendingFrameUpTargets = new List<CardInteraction>();
+    private int pendingFrameUpOwnerId = -1;
     public bool HasPendingFrameUpChoice => pendingFrameUpCard != null;
     [SerializeField] ArrestHandler arrestHandler; // ArrestHandlerを参照
 
@@ -274,6 +275,8 @@ CardsCollected:
             CardInteraction thief = phantomThieves[i];
             Debug.Log($"【番犬】{watchdog.name}が{thief.name}を逮捕！");
             Arrest(thief);
+            if (thief.specialEffect == SpecialActionEffect.ElectricBaton)
+                ApplyElectricBatonCageEffect();
             int ownerId = FindPlayerIdByCard(watchdog);
             if (ownerId >= 0)
                 successfulCagePlayerIds.Add(ownerId);
@@ -325,6 +328,15 @@ CardsCollected:
     public int[] GetSuccessfulCagePlayerIds()
     {
         return successfulCagePlayerIds.ToArray();
+    }
+
+    public void SetSuccessfulCagePlayerIds(int[] playerIds)
+    {
+        successfulCagePlayerIds.Clear();
+        if (playerIds == null) return;
+        foreach (int playerId in playerIds)
+            if (playerId >= 0 && !successfulCagePlayerIds.Contains(playerId))
+                successfulCagePlayerIds.Add(playerId);
     }
 
     public bool ArrestFromExternalEffect(CardInteraction card, bool immediateEffect = false)
@@ -389,12 +401,21 @@ CardsCollected:
         if (targets.Count == 0) return false;
 
         int ownerId = FindPlayerIdByCard(card);
-        if (ownerId == 0)
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession || ownerId == 0)
         {
             pendingFrameUpCard = card;
+            pendingFrameUpOwnerId = ownerId;
             pendingFrameUpTargets.Clear();
             pendingFrameUpTargets.AddRange(targets);
             Debug.Log("【濡れ衣】逮捕を移す通常展示プレイヤーを選んでください。");
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                int day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1;
+                int networkSource = KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(ownerId);
+                if (KaitouOnline.KaitouOnlineGameBridge.TryGetFrameUpChoice(
+                        day, networkSource, out int networkTarget))
+                    ApplyOnlineFrameUpChoice(networkSource, networkTarget);
+            }
         }
         else
         {
@@ -407,8 +428,51 @@ CardsCollected:
     {
         EndOwnerActionWithoutPenalty(source);
         Debug.Log($"【濡れ衣】{source.name}の逮捕を{target.name}へ移しました。");
-        Arrest(target);
+        ArrestPlayerById(FindPlayerIdByCard(target));
         pendingFrameUpCard = null;
+        pendingFrameUpOwnerId = -1;
+        pendingFrameUpTargets.Clear();
+    }
+
+    private bool ArrestPlayerById(int playerId)
+    {
+        if (playerId == 0)
+        {
+            Player p = FindFirstObjectByType<Player>();
+            if (p != null && !p.HasBeenArrested) { p.ShowArrestEffect(); return true; }
+        }
+        else if (playerId == 1)
+        {
+            Player2 p = FindFirstObjectByType<Player2>();
+            if (p != null && !p.HasBeenArrested) { p.ShowArrestEffect(); return true; }
+        }
+        else if (playerId == 2)
+        {
+            Player3 p = FindFirstObjectByType<Player3>();
+            if (p != null && !p.HasBeenArrested) { p.ShowArrestEffect(); return true; }
+        }
+        else if (playerId == 3)
+        {
+            Player4 p = FindFirstObjectByType<Player4>();
+            if (p != null && !p.HasBeenArrested) { p.ShowArrestEffect(); return true; }
+        }
+        return false;
+    }
+
+    public void ApplyOnlineFrameUpChoice(int networkSourceSeat, int networkTargetSeat)
+    {
+        if (pendingFrameUpCard == null) return;
+        int sourceSeat = KaitouOnline.KaitouOnlineGameBridge.ToLocalSeat(networkSourceSeat);
+        int targetSeat = KaitouOnline.KaitouOnlineGameBridge.ToLocalSeat(networkTargetSeat);
+        if (pendingFrameUpOwnerId != sourceSeat) return;
+        CardInteraction target = pendingFrameUpTargets.FirstOrDefault(value =>
+            FindPlayerIdByCard(value) == targetSeat);
+        CardInteraction source = pendingFrameUpCard;
+        EndOwnerActionWithoutPenalty(source);
+        bool arrested = ArrestPlayerById(targetSeat);
+        Debug.Log($"【濡れ衣同期】Player{targetSeat + 1}を逮捕：{arrested}");
+        pendingFrameUpCard = null;
+        pendingFrameUpOwnerId = -1;
         pendingFrameUpTargets.Clear();
     }
 
@@ -438,7 +502,9 @@ CardsCollected:
 
     private void OnGUI()
     {
-        if (pendingFrameUpCard == null) return;
+        if (pendingFrameUpCard == null ||
+            (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession &&
+             pendingFrameUpOwnerId != 0)) return;
         GUIStyle messageStyle = new GUIStyle(GUI.skin.box)
         {
             fontSize = 30,
@@ -459,10 +525,29 @@ CardsCollected:
         {
             CardInteraction target = pendingFrameUpTargets[i];
             int playerId = FindPlayerIdByCard(target);
+            int displayedPlayerId = KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession
+                ? KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(playerId)
+                : playerId;
             if (GUI.Button(new Rect(startX + i * width, 145f, width - 12f, 72f),
-                    $"Player {playerId + 1}", buttonStyle))
+                    $"Player {displayedPlayerId + 1}", buttonStyle))
             {
-                TransferFrameUp(pendingFrameUpCard, target);
+                if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+                {
+                    int day = HandManager.Instance != null
+                        ? HandManager.Instance.CurrentDay : 1;
+                    int localSource = pendingFrameUpOwnerId;
+                    int localTarget = playerId;
+                    int networkSource = KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(
+                        localSource);
+                    int networkTarget = KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(
+                        localTarget);
+                    // 押した端末では即時反映し、通信の戻り待ちでボタンが無反応に見えないようにする。
+                    ApplyOnlineFrameUpChoice(networkSource, networkTarget);
+                    KaitouOnline.KaitouOnlineGameBridge.SubmitFrameUpChoice(
+                        day, localSource, localTarget);
+                }
+                else
+                    TransferFrameUp(pendingFrameUpCard, target);
                 break;
             }
         }

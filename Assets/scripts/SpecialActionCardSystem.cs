@@ -113,12 +113,18 @@ public static class SpecialActionCardSystem
         if (initialCardsDealt || handManager == null) return;
         initialCardsDealt = true;
 
+        KaitouOnline.KaitouOnlineGameBridge.PrepareInitialSpecialRandom(0);
         GrantCardsToSeat(0, 2, handManager);
         if (handManager.ActionPlayerCount == 2 || handManager.ActionPlayerCount == 4)
+        {
+            KaitouOnline.KaitouOnlineGameBridge.PrepareInitialSpecialRandom(1);
             GrantCardsToSeat(1, 2, handManager);
+        }
         if (handManager.ActionPlayerCount >= 3)
         {
+            KaitouOnline.KaitouOnlineGameBridge.PrepareInitialSpecialRandom(2);
             GrantCardsToSeat(2, 2, handManager);
+            KaitouOnline.KaitouOnlineGameBridge.PrepareInitialSpecialRandom(3);
             GrantCardsToSeat(3, 2, handManager);
         }
     }
@@ -130,6 +136,8 @@ public static class SpecialActionCardSystem
         {
             int seat = FindActionSeat(treasureId, handManager);
             if (seat < 0) continue;
+            KaitouOnline.KaitouOnlineGameBridge.PrepareCageRewardRandom(
+                handManager.CurrentDay, seat);
             CardInteraction selected = GetSelectedCard(seat);
             int rewardCount = selected != null &&
                               selected.specialEffect == SpecialActionEffect.Watchdog ? 2 : 1;
@@ -171,9 +179,10 @@ public static class SpecialActionCardSystem
         for (int value = 1; value <= (int)SpecialActionEffect.AdvanceNotice; value++)
         {
             SpecialActionEffect effect = (SpecialActionEffect)value;
-            if (effect == SpecialActionEffect.SoloStage && soloStageCreated) continue;
-            if (effect == SpecialActionEffect.Watchdog && watchdogCreated) continue;
-            if (effect == SpecialActionEffect.AdvanceNotice && advanceNoticeCreated) continue;
+            // テストボタンでは、ゲーム全体の一枚制限より「P1が全種類を持つ」を優先する。
+            // 二度押ししても同じ効果は増やさない。
+            if (ownerCards.Exists(card =>
+                    card != null && card.specialEffect == effect)) continue;
             bool needsThiefTemplate = IsThiefEffect(effect);
             CardInteraction card = CreateCard(
                 needsThiefTemplate ? thiefTemplate : exhibitTemplate, effect, 0);
@@ -187,6 +196,58 @@ public static class SpecialActionCardSystem
         handManager.RefreshActionHandLayout();
         handManager.RefreshPlayerOneCardAvailability();
         Debug.Log("【テスト配布】Player1に実装済み特殊行動カード全種類を配布しました。");
+    }
+
+    public static void GrantUnverifiedSpecialCardsToPlayerOne(HandManager handManager)
+    {
+        GrantUnverifiedSpecialCardsToSeat(0, handManager);
+    }
+
+    public static void GrantUnverifiedSpecialCardsToSeat(
+        int seat, HandManager handManager)
+    {
+        if (handManager == null) return;
+        List<CardInteraction> ownerCards = GetCards(seat);
+        if (ownerCards == null ||
+            !TryGetTemplates(seat, ownerCards, out CardInteraction exhibitTemplate,
+                out CardInteraction thiefTemplate)) return;
+
+        SpecialActionEffect[] effects =
+        {
+            SpecialActionEffect.FrameUp,
+            SpecialActionEffect.SoloStage,
+            SpecialActionEffect.BlackoutModule,
+            SpecialActionEffect.Watchdog,
+            SpecialActionEffect.Detective,
+            SpecialActionEffect.Prison,
+            SpecialActionEffect.ElectricBaton,
+            SpecialActionEffect.AnalysisGlasses,
+            SpecialActionEffect.Appraiser,
+            SpecialActionEffect.HoneyTrap,
+            SpecialActionEffect.AdvanceNotice
+        };
+        foreach (SpecialActionEffect effect in effects)
+        {
+            if (ownerCards.Exists(card => card != null &&
+                card.specialEffect == effect)) continue;
+            CardInteraction card = CreateCard(
+                IsThiefEffect(effect) ? thiefTemplate : exhibitTemplate, effect, seat);
+            if (effect == SpecialActionEffect.SoloStage) soloStageCreated = true;
+            if (effect == SpecialActionEffect.Watchdog) watchdogCreated = true;
+            if (effect == SpecialActionEffect.AdvanceNotice) advanceNoticeCreated = true;
+            ownerCards.Add(card);
+            if (seat == 0)
+            {
+                handManager.cards.Add(card);
+                card.SetHandManager(handManager);
+            }
+        }
+        if (seat == 0)
+        {
+            handManager.RefreshActionHandLayout();
+            handManager.RefreshPlayerOneCardAvailability();
+        }
+        Debug.Log($"【テスト配布】Player{seat + 1}に未確認の特殊行動カードだけを配布しました。");
     }
 
     public static void StartAppraiserAnalysisTest(HandManager handManager)
@@ -246,6 +307,18 @@ public static class SpecialActionCardSystem
 
     public static bool IsImprisoned(int seat) =>
         imprisonedUntilEndOfDay.ContainsKey(seat);
+
+    public static int GetPrisonUntilDay(int seat) =>
+        imprisonedUntilEndOfDay.TryGetValue(seat, out int day) ? day : -1;
+
+    public static void ApplyOnlinePrisonState(int seat, int untilDay)
+    {
+        if (seat < 0) return;
+        if (untilDay < 0)
+            imprisonedUntilEndOfDay.Remove(seat);
+        else
+            imprisonedUntilEndOfDay[seat] = untilDay;
+    }
 
     public static void ExcludeFromNextDay(int seat, int currentDay)
     {

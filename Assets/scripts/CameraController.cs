@@ -144,7 +144,28 @@ public class CameraController : MonoBehaviour
             if (detectiveTargetSeats.Count == 0) continue;
 
             int chosenSeat;
-            if (detectiveSeat == 0)
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                int day = handManager != null ? handManager.CurrentDay : 1;
+                int networkDetective =
+                    KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(detectiveSeat);
+                if (detectiveSeat == 0)
+                {
+                    detectiveChosenSeat = -1;
+                    detectiveChoiceActive = true;
+                    while (detectiveChosenSeat < 0) yield return null;
+                    detectiveChoiceActive = false;
+                    KaitouOnline.KaitouOnlineGameBridge.SubmitDetectiveChoice(
+                        day, detectiveSeat, detectiveChosenSeat);
+                }
+                int networkTarget = -1;
+                while (!KaitouOnline.KaitouOnlineGameBridge.TryGetDetectiveChoice(
+                           day, networkDetective, out networkTarget))
+                    yield return null;
+                chosenSeat =
+                    KaitouOnline.KaitouOnlineGameBridge.ToLocalSeat(networkTarget);
+            }
+            else if (detectiveSeat == 0)
             {
                 detectiveChosenSeat = -1;
                 detectiveChoiceActive = true;
@@ -202,8 +223,13 @@ public class CameraController : MonoBehaviour
 
             int rewardCount = result.Value.Count >= 2 ? 1 : 2;
             foreach (int detectiveSeat in result.Value)
+            {
+                KaitouOnline.KaitouOnlineGameBridge.PrepareDetectiveRewardRandom(
+                    handManager != null ? handManager.CurrentDay : 1,
+                    detectiveSeat);
                 SpecialActionCardSystem.GrantDetectiveReward(
                     detectiveSeat, rewardCount, handManager);
+            }
 
             Debug.Log(
                 $"【名探偵成功】Player{result.Key + 1}の怪盗を逮捕・当日除外。" +
@@ -350,7 +376,28 @@ public class CameraController : MonoBehaviour
                 continue;
 
             TreasureGame.TreasureType chosenType;
-            if (seat == 0)
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                int day = handManager != null ? handManager.CurrentDay : 1;
+                int networkAppraiser =
+                    KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(seat);
+                if (seat == 0)
+                {
+                    appraiserChosenType = -1;
+                    appraiserMessage = "鑑定士：公開する宝の種類を選んでください。";
+                    appraiserTypeChoiceActive = true;
+                    while (appraiserChosenType < 0) yield return null;
+                    appraiserTypeChoiceActive = false;
+                    KaitouOnline.KaitouOnlineGameBridge.SubmitAppraiserTypeChoice(
+                        day, seat, appraiserChosenType);
+                }
+                int typeValue = -1;
+                while (!KaitouOnline.KaitouOnlineGameBridge.TryGetAppraiserTypeChoice(
+                           day, networkAppraiser, out typeValue))
+                    yield return null;
+                chosenType = (TreasureGame.TreasureType)typeValue;
+            }
+            else if (seat == 0)
             {
                 appraiserChosenType = -1;
                 appraiserMessage = "鑑定士：公開する宝の種類を選んでください。";
@@ -417,6 +464,7 @@ public class CameraController : MonoBehaviour
         foreach (KeyValuePair<int, HashSet<TreasureGame.TreasureType>> entry in rearrangeTypesByPlayer)
         {
             if (entry.Key == 0) continue;
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession) continue;
             treasureController.ShuffleAppraiserDisplay(entry.Key, entry.Value);
             cpuRearrangerCount++;
         }
@@ -434,26 +482,75 @@ public class CameraController : MonoBehaviour
         }
 
         float cpuFinishTime = Time.time + (cpuRearrangerCount > 0 ? 1.2f : 0f);
-        while (!playerOneDone || Time.time < cpuFinishTime)
+        bool onlineAppraiser =
+            KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession;
+        int appraiserDay = handManager != null ? handManager.CurrentDay : 1;
+        bool localOrderSent = false;
+        while (!playerOneDone || Time.time < cpuFinishTime ||
+               onlineAppraiser && !AllOnlineAppraiserOrdersReady(
+                   appraiserDay, rearrangeTypesByPlayer))
         {
             if (!playerOneDone && appraiserConfirmed)
             {
                 playerOneDone = true;
                 appraiserConfirmActive = false;
                 treasureController.FinishAppraiserRearrangement();
+                if (onlineAppraiser)
+                {
+                    KaitouOnline.KaitouOnlineGameBridge.SubmitAppraiserOrder(
+                        appraiserDay, 0,
+                        treasureController.GetDisplayedTreasureNetworkOrder(0));
+                    localOrderSent = true;
+                }
                 if (Time.time < cpuFinishTime)
                     appraiserMessage = "ほかのPlayerが並び替え中です。";
             }
-            else if (playerOneDone && Time.time < cpuFinishTime)
+            else if (playerOneDone && (Time.time < cpuFinishTime ||
+                     onlineAppraiser && !AllOnlineAppraiserOrdersReady(
+                         appraiserDay, rearrangeTypesByPlayer)))
             {
                 appraiserMessage = "ほかのPlayerが並び替え中です。";
             }
+            if (onlineAppraiser && playerOneDone && !localOrderSent &&
+                rearrangeTypesByPlayer.ContainsKey(0))
+            {
+                KaitouOnline.KaitouOnlineGameBridge.SubmitAppraiserOrder(
+                    appraiserDay, 0,
+                    treasureController.GetDisplayedTreasureNetworkOrder(0));
+                localOrderSent = true;
+            }
             yield return null;
+        }
+        if (onlineAppraiser)
+        {
+            foreach (int localPlayerId in rearrangeTypesByPlayer.Keys)
+            {
+                int networkSeat =
+                    KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(localPlayerId);
+                if (KaitouOnline.KaitouOnlineGameBridge.TryGetAppraiserOrder(
+                        appraiserDay, networkSeat, out int[] order))
+                    treasureController.ApplyOnlineAppraiserOrder(
+                        networkSeat, order);
+            }
         }
         appraiserConfirmActive = false;
         appraiserMessage = "全員の並び替えが完了しました。再展示します。";
         yield return StartCoroutine(treasureController.RedisplayAppraisedTreasures(revealedSet));
         appraiserMessage = "";
+    }
+
+    private static bool AllOnlineAppraiserOrdersReady(int day,
+        Dictionary<int, HashSet<TreasureGame.TreasureType>> rearrangeTypesByPlayer)
+    {
+        foreach (int localPlayerId in rearrangeTypesByPlayer.Keys)
+        {
+            int networkSeat =
+                KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(localPlayerId);
+            if (!KaitouOnline.KaitouOnlineGameBridge.TryGetAppraiserOrder(
+                    day, networkSeat, out _))
+                return false;
+        }
+        return true;
     }
 
     private static string TreasureTypeLabel(TreasureGame.TreasureType type)
@@ -611,7 +708,11 @@ public class CameraController : MonoBehaviour
         TreasureGame.Treasure[] treasures =
             FindObjectsByType<TreasureGame.Treasure>(FindObjectsSortMode.None);
 
-        // Player1は手動選択。CPUプレイヤーは選べる手札から1枚を自動選択する。
+        // オンラインでは各人が自分の画面のPlayer1を選び、相手の選択は通信で届く。
+        // ローカル対戦時だけPlayer2以降をCPUとして自動選択する。
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession) return;
+
+        // Player1は手動選択。CPUプレイヤーは選べる手札から自動選択する。
         foreach (int playerId in displayPlayers)
         {
             if (playerId == ToTreasurePlayerId(0)) continue;
@@ -705,7 +806,11 @@ public class CameraController : MonoBehaviour
         for (int seat = 0; seat < 4; seat++)
         {
             CardInteraction selected = GetSelectedActionCard(seat);
-            if (SpecialActionCardSystem.IsAdvanceNoticeActiveToday(seat)) continue;
+            bool isHeldAdvanceNotice = selected != null &&
+                selected.specialEffect == SpecialActionEffect.AdvanceNotice &&
+                SpecialActionCardSystem.IsAdvanceNoticePendingCard(seat, selected) &&
+                SpecialActionCardSystem.IsAdvanceNoticeActiveToday(seat);
+            if (isHeldAdvanceNotice) continue;
             if (selected != null && IsActionSeatConfigured(seat) &&
                 !selectedCards.Contains(selected))
                 selectedCards.Add(selected);
@@ -730,7 +835,14 @@ public class CameraController : MonoBehaviour
         if (securityDice != null && players.Count > 0)
         {
             Debug.Log("サイコロ警備を発動！");
-            securityDice.RollDice(players);
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                int day = handManager != null ? handManager.CurrentDay : 1;
+                KaitouOnline.KaitouOnlineGameBridge.BeginSecurityDice(
+                    securityDice, players, day);
+            }
+            else
+                securityDice.RollDice(players);
         }
         else
         {
@@ -742,6 +854,12 @@ public class CameraController : MonoBehaviour
 
     private IEnumerator WaitAndThiefPhase()
     {
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+        {
+            int day = handManager != null ? handManager.CurrentDay : 1;
+            while (KaitouOnline.KaitouOnlineGameBridge.IsWaitingForSecurityDice(day))
+                yield return null;
+        }
         // 警備サイコロが停止して結果が確定するまで、怪盗は盗み始めない。
         DiceEffectController diceEffect = securityDice != null
             ? securityDice.diceEffectController
@@ -765,6 +883,14 @@ public class CameraController : MonoBehaviour
         else if (hasPendingDiceArrest)
             // 少しためて表示する逮捕文字と落下演出を確認してから怪盗処理へ進む。
             yield return new WaitForSeconds(0.85f);
+
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+        {
+            int day = handManager != null ? handManager.CurrentDay : 1;
+            KaitouOnline.KaitouOnlineGameBridge.SynchronizeArrestResolution(day);
+            while (KaitouOnline.KaitouOnlineGameBridge.IsWaitingForArrestResolution(day))
+                yield return null;
+        }
 
         // サイコロと檻のどちらかで逮捕された怪盗は、ここで除外される。
         yield return StartCoroutine(RunTreasureRobberiesFromActionCards());
@@ -813,6 +939,11 @@ public class CameraController : MonoBehaviour
         while (treasureController.Phase != TreasureGame.TreasurePhase.Waiting &&
                treasureController.Phase != TreasureGame.TreasurePhase.GameOver)
         {
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                yield return null;
+                continue;
+            }
             if (treasureController.Phase == TreasureGame.TreasurePhase.Robbing &&
                 treasureController.ActiveRobber != null &&
                 treasureController.ActiveRobber.PlayerId != 0)
@@ -951,16 +1082,56 @@ public class CameraController : MonoBehaviour
     {
         yield return StartCoroutine(RollPrisonReleaseDice());
         handManager.MoveCardsAfterThiefPhase();
-       
+
         cardInteraction.MoveCardsAfterThiefPhase();
+        int penaltyDay = handManager != null ? handManager.CurrentDay - 1 : 1;
+        KaitouOnline.KaitouOnlineGameBridge.PreparePenaltyRandom(penaltyDay, 0);
         Player.MoveCardsAfterThiefPhase();
-        if (Player2 != null && Player2.gameObject.activeInHierarchy) Player2.MoveCardsAfterThiefPhase();
-        if (Player3 != null && Player3.gameObject.activeInHierarchy) Player3.MoveCardsAfterThiefPhase();
-        if (Player4 != null && Player4.gameObject.activeInHierarchy) Player4.MoveCardsAfterThiefPhase();
+        if (Player2 != null && Player2.gameObject.activeInHierarchy)
+        {
+            KaitouOnline.KaitouOnlineGameBridge.PreparePenaltyRandom(penaltyDay, 1);
+            Player2.MoveCardsAfterThiefPhase();
+        }
+        if (Player3 != null && Player3.gameObject.activeInHierarchy)
+        {
+            KaitouOnline.KaitouOnlineGameBridge.PreparePenaltyRandom(penaltyDay, 2);
+            Player3.MoveCardsAfterThiefPhase();
+        }
+        if (Player4 != null && Player4.gameObject.activeInHierarchy)
+        {
+            KaitouOnline.KaitouOnlineGameBridge.PreparePenaltyRandom(penaltyDay, 3);
+            Player4.MoveCardsAfterThiefPhase();
+        }
+        ReevaluateActionCardEliminations();
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+        {
+            int token = 100000 +
+                (handManager != null ? handManager.CurrentDay : 1);
+            KaitouOnline.KaitouOnlineGameBridge.SynchronizeArrestResolution(token);
+            while (KaitouOnline.KaitouOnlineGameBridge
+                       .IsWaitingForArrestResolution(token))
+                yield return null;
+        }
         arrestEffect.MoveCardsAfterThiefPhase();
 
         StartCoroutine(Wait());
 
+    }
+
+    private void ReevaluateActionCardEliminations()
+    {
+        if (Player != null &&
+            SpecialActionCardSystem.IsEliminatedByNormalCards(Player.playerCards))
+            Player.isEliminated = true;
+        if (Player2 != null && Player2.gameObject.activeInHierarchy &&
+            SpecialActionCardSystem.IsEliminatedByNormalCards(Player2.player2Cards))
+            Player2.isEliminated = true;
+        if (Player3 != null && Player3.gameObject.activeInHierarchy &&
+            SpecialActionCardSystem.IsEliminatedByNormalCards(Player3.player3Cards))
+            Player3.isEliminated = true;
+        if (Player4 != null && Player4.gameObject.activeInHierarchy &&
+            SpecialActionCardSystem.IsEliminatedByNormalCards(Player4.player4Cards))
+            Player4.isEliminated = true;
     }
 
     private IEnumerator RollPrisonReleaseDice()
@@ -968,13 +1139,27 @@ public class CameraController : MonoBehaviour
         if (handManager == null) yield break;
         List<int> prisoners =
             SpecialActionCardSystem.GetPrisonersEligibleForRelease(handManager.CurrentDay);
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            prisoners.Sort((a, b) =>
+                KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(a).CompareTo(
+                    KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(b)));
         DiceEffectController dice = securityDice != null
             ? securityDice.diceEffectController
             : null;
 
         foreach (int seat in prisoners)
         {
-            int result = Random.Range(1, 7);
+            int result;
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                int networkSeat = KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(seat);
+                int token = 300000 + handManager.CurrentDay * 10 + networkSeat;
+                KaitouOnline.KaitouOnlineGameBridge.BeginPrisonRoll(token);
+                while (!KaitouOnline.KaitouOnlineGameBridge.TryGetPrisonRoll(
+                           token, out result))
+                    yield return null;
+            }
+            else result = Random.Range(1, 7);
             prisonRollSeat = seat;
             prisonRollMessage =
                 $"Player{seat + 1}が監獄の釈放サイコロを振っています";
@@ -1022,6 +1207,29 @@ public class CameraController : MonoBehaviour
                 while (treasureController.Phase == TreasureGame.TreasurePhase.Displaying ||
                        treasureController.Phase == TreasureGame.TreasurePhase.SelectingDisplays)
                     yield return null;
+
+                if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+                {
+                    int token = 200000 +
+                        (handManager != null ? handManager.CurrentDay : 1);
+                    KaitouOnline.VictoryResolutionState state =
+                        KaitouOnline.KaitouOnlineSession.Instance != null &&
+                        KaitouOnline.KaitouOnlineSession.Instance.IsHost
+                            ? treasureController.BuildOnlineVictoryResolution(token)
+                            : new KaitouOnline.VictoryResolutionState { day = token };
+                    KaitouOnline.KaitouOnlineGameBridge.BeginVictoryResolution(state);
+                    while (KaitouOnline.KaitouOnlineGameBridge
+                               .IsWaitingForVictoryResolution(token))
+                        yield return null;
+                }
+                else
+                    treasureController.EvaluateVictoryNow();
+
+                if (treasureController.Phase == TreasureGame.TreasurePhase.GameOver)
+                {
+                    handManager?.EndGame();
+                    yield break;
+                }
             }
         }
 
@@ -1033,6 +1241,14 @@ public class CameraController : MonoBehaviour
         {
             Player.RestoreAdvanceNotice(advanceNotice);
             handManager?.ForceAdvanceNoticeSelection(advanceNotice);
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                KaitouOnline.KaitouOnlineGameBridge.SubmitLocalAction(
+                    advanceNotice, 10);
+                Debug.Log("<color=#FF7A7A>【予告状実行日】固定した予告状を同期し、相手の選択を待ちます。</color>");
+                isFlipping = false;
+                yield break;
+            }
             Player2?.SelectRandomCard();
             Player3?.SelectRandomCard();
             Player4?.SelectRandomCard();
@@ -1044,6 +1260,12 @@ public class CameraController : MonoBehaviour
         if (SpecialActionCardSystem.CannotActToday(0))
         {
             Debug.Log("<color=#BFA8FF>【行動休止】Player1はこの日の行動を休みます。</color>");
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                KaitouOnline.KaitouOnlineGameBridge.SubmitLocalPass();
+                isFlipping = false;
+                yield break;
+            }
             Player2?.SelectRandomCard();
             Player3?.SelectRandomCard();
             Player4?.SelectRandomCard();
