@@ -14,6 +14,7 @@ public static class KaitouWebOnlineSetup
     private const string GameScene = "Assets/Scenes/IntegratedGameScene.unity";
     private const string MacBuildDirectory = "Builds/KaitouOnlineMac";
     private const string MacBuildPath = MacBuildDirectory + "/KaitouTreasure.app";
+    private const string WebGLBuildDirectory = "Builds/KaitouOnlineWebGL";
 
     [MenuItem("怪盗ゲーム/Web・オンライン/メニューとWebGL設定を作成")]
     public static void Setup()
@@ -69,6 +70,74 @@ public static class KaitouWebOnlineSetup
         }
         else
             Debug.LogError($"Mac接続テストアプリの作成に失敗しました：{report.summary.result}");
+    }
+
+    [MenuItem("怪盗ゲーム/Web・オンライン/Web版を作る")]
+    public static void BuildWebGL()
+    {
+        if (EditorApplication.isPlaying)
+        {
+            Debug.LogError("再生を停止してからWeb版を作ってください。");
+            return;
+        }
+        if (!BuildPipeline.IsBuildTargetSupported(
+                BuildTargetGroup.WebGL, BuildTarget.WebGL))
+        {
+            Debug.LogError("WebGL Build SupportがUnityに入っていません。");
+            EditorUtility.DisplayDialog(
+                "WebGL Build Supportが必要です",
+                "Unity Hub > Installs > 6000.0.26f1 > Add modules から、WebGL Build Supportを追加してください。追加後はUnityを再起動してください。",
+                "OK");
+            return;
+        }
+        if (!File.Exists(MenuScene) || !File.Exists(GameScene))
+        {
+            Debug.LogError("MainMenuまたはIntegratedGameSceneがありません。");
+            return;
+        }
+
+        EditorSceneManager.SaveOpenScenes();
+        EditorBuildSettings.scenes = new[]
+        {
+            new EditorBuildSettingsScene(MenuScene, true),
+            new EditorBuildSettingsScene(GameScene, true)
+        };
+
+        // Netlify Dropなどへフォルダをそのまま置ける設定。
+        PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
+        PlayerSettings.WebGL.decompressionFallback = false;
+        PlayerSettings.WebGL.dataCaching = true;
+        PlayerSettings.runInBackground = true;
+        PlayerSettings.productName = "怪盗ゲーム TREASURE";
+
+        if (Directory.Exists(WebGLBuildDirectory))
+            Directory.Delete(WebGLBuildDirectory, true);
+        Directory.CreateDirectory(WebGLBuildDirectory);
+
+        BuildReport report;
+        try
+        {
+            report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = new[] { MenuScene, GameScene },
+                locationPathName = WebGLBuildDirectory,
+                target = BuildTarget.WebGL,
+                options = BuildOptions.None
+            });
+        }
+        catch (UnityException exception)
+        {
+            Debug.LogError("Web版の作成に失敗しました：" + exception.Message);
+            return;
+        }
+
+        if (report.summary.result == BuildResult.Succeeded)
+        {
+            Debug.Log($"【Web版完成】{WebGLBuildDirectory}");
+            EditorUtility.RevealInFinder(WebGLBuildDirectory);
+        }
+        else
+            Debug.LogError("Web版の作成に失敗しました：" + report.summary.result);
     }
 }
 #endif
