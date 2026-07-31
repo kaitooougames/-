@@ -161,7 +161,9 @@ namespace KaitouOnline
 
     public static class Protocol
     {
-        public const int Version = 1;
+        // オンライン進行規約。古いMacビルドとの混在を防ぐため、
+        // フェーズ同期方式を変更したら必ず更新する。
+        public const int Version = 2;
         public const string MessageName = "KaitouOnlineEvent";
 
         public static string Json<T>(T value) => JsonUtility.ToJson(value);

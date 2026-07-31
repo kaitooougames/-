@@ -300,7 +300,11 @@ namespace KaitouOnline
         {
             reader.ReadValueSafe(out string json);
             Envelope envelope = JsonUtility.FromJson<Envelope>(json);
-            if (envelope.version != Protocol.Version) return;
+            if (envelope.version != Protocol.Version)
+            {
+                Report($"通信バージョンが一致しません（相手:{envelope.version} / 自分:{Protocol.Version}）。Macアプリを再ビルドしてください。");
+                return;
+            }
             if (envelope.type == MessageType.LobbyState)
             {
                 LobbyState lobby = Protocol.Parse<LobbyState>(envelope.payload);
