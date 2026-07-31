@@ -37,6 +37,7 @@ public class CardInteraction : MonoBehaviour
     private const float HoverScale = 1.04f;
     private const float SelectedThiefScale = 1.08f;
     private bool isMoving = false;
+    public bool IsMoving => isMoving;
     private Vector3 targetPosition;
     private Quaternion targetRotation;
     private float moveSpeed = 5f;

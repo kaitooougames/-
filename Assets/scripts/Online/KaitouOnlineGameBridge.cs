@@ -18,6 +18,9 @@ namespace KaitouOnline
             new Dictionary<int, ActionCardChoice>();
         private KaitouOnlineSession session;
         private bool revealStarted;
+        private bool placementStarted;
+        private int placementDay = -1;
+        private readonly HashSet<int> placementReadySeats = new HashSet<int>();
         public static string WaitingMessage { get; private set; } = "";
         public static string PriorityMessage { get; private set; } = "";
         private readonly Dictionary<int, int> securityDiceResults =
@@ -97,6 +100,9 @@ namespace KaitouOnline
             EnsureInstance();
             Instance.hostChoices.Clear();
             Instance.revealStarted = false;
+            Instance.placementStarted = false;
+            Instance.placementDay = -1;
+            Instance.placementReadySeats.Clear();
             WaitingMessage = "";
             Debug.Log("<color=#70E8FF>【オンライン】次の日の行動選択待ちへ移行</color>");
         }
@@ -601,6 +607,22 @@ namespace KaitouOnline
                     session.Send(MessageType.FrameUpChoice, -1, request.data);
                     return;
                 }
+                if (request.action == "action_placement_ready")
+                {
+                    OnlineSeatChoice ready = Protocol.Parse<OnlineSeatChoice>(request.data);
+                    int currentDay = HandManager.Instance != null
+                        ? HandManager.Instance.CurrentDay : 1;
+                    if (ready.day != currentDay) return;
+                    placementReadySeats.Add(envelope.senderSeat);
+                    Debug.Log($"<color=#70E8FF>【伏せ配置完了】P{envelope.senderSeat + 1} " +
+                              $"({placementReadySeats.Count}/{session.RoomPlayerCount})</color>");
+                    if (placementReadySeats.Count >= session.RoomPlayerCount)
+                    {
+                        session.Send(MessageType.RevealActions, -1,
+                            Protocol.Json(new OnlineSeatChoice { day = currentDay }));
+                    }
+                    return;
+                }
                 if (request.action != "select_action_card") return;
                 ActionCardChoice choice = Protocol.Parse<ActionCardChoice>(request.data);
                 choice.seat = envelope.senderSeat;
@@ -624,6 +646,14 @@ namespace KaitouOnline
                     Protocol.Parse<ActionSelectionState>(envelope.payload);
                 if (state.choices == null || state.choices.Length == 0) return;
                 ApplyReadyChoices(state.day, state.choices);
+                return;
+            }
+
+            if (envelope.type == MessageType.RevealActions)
+            {
+                OnlineSeatChoice reveal =
+                    Protocol.Parse<OnlineSeatChoice>(envelope.payload);
+                BeginSynchronizedReveal(reveal.day);
                 return;
             }
 
@@ -1003,13 +1033,14 @@ namespace KaitouOnline
             for (int seat = 0; seat < ordered.Length; seat++)
                 if (!hostChoices.TryGetValue(seat, out ordered[seat]) ||
                     ordered[seat].day != day) return;
+            placementReadySeats.Clear();
             session.Send(MessageType.StateSnapshot, -1,
                 Protocol.Json(new ActionSelectionState { day = day, choices = ordered }));
         }
 
         private void ApplyReadyChoices(int snapshotDay, ActionCardChoice[] choices)
         {
-            if (revealStarted) return;
+            if (revealStarted || placementStarted) return;
             int currentDay = HandManager.Instance != null
                 ? HandManager.Instance.CurrentDay : 1;
             if (snapshotDay != currentDay || choices == null ||
@@ -1043,12 +1074,53 @@ namespace KaitouOnline
                 }
             }
 
+            placementStarted = true;
+            placementDay = snapshotDay;
+            WaitingMessage = "全員の行動カードを伏せて配置しています。";
+            StartCoroutine(ReportPlacementReadyWhenFinished(snapshotDay));
+        }
+
+        private System.Collections.IEnumerator ReportPlacementReadyWhenFinished(int day)
+        {
+            while (placementDay == day && AnySelectedActionCardMoving())
+                yield return null;
+
+            if (placementDay != day) yield break;
+            session.SendAction(new ActionRequest
+            {
+                action = "action_placement_ready",
+                actorSeat = session.LocalSeat,
+                data = Protocol.Json(new OnlineSeatChoice
+                {
+                    day = day,
+                    actorSeat = session.LocalSeat
+                })
+            });
+            WaitingMessage = "相手の行動カード配置を待っています。";
+        }
+
+        private static bool AnySelectedActionCardMoving()
+        {
+            Player player = Object.FindFirstObjectByType<Player>();
+            if (player != null && player.SelectedCard != null &&
+                player.SelectedCard.IsMoving) return true;
+            Player2 player2 = Object.FindFirstObjectByType<Player2>();
+            return player2 != null && player2.SelectedCard != null &&
+                   player2.SelectedCard.IsMoving;
+        }
+
+        private void BeginSynchronizedReveal(int day)
+        {
+            int currentDay = HandManager.Instance != null
+                ? HandManager.Instance.CurrentDay : 1;
+            if (revealStarted || !placementStarted || placementDay != day ||
+                day != currentDay) return;
             revealStarted = true;
             WaitingMessage = "";
             CameraController cameraController =
                 Camera.main != null ? Camera.main.GetComponent<CameraController>() : null;
             cameraController?.MoveCamera();
-            Debug.Log("<color=#70E8FF>【オンライン】全員の行動選択が揃いました。一斉開示します。</color>");
+            Debug.Log($"<color=#70E8FF>【オンライン一斉開示】{day}日目</color>");
         }
 
         private static ActionCardChoice Describe(CardInteraction card, int seat, int number) =>
