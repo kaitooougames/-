@@ -341,8 +341,18 @@ namespace KaitouOnline
         public static void SubmitFrameUpChoice(int day,
             int localSourceSeat, int localTargetSeat)
         {
-            SubmitOnlineSeatChoice("frame_up_choice", day,
-                ToNetworkSeat(localSourceSeat), ToNetworkSeat(localTargetSeat));
+            int source = ToNetworkSeat(localSourceSeat);
+            int target = ToNetworkSeat(localTargetSeat);
+            if (Instance != null && Instance.session.IsHost)
+            {
+                OnlineSeatChoice choice = new OnlineSeatChoice
+                { day = day, actorSeat = source, value = target };
+                Instance.frameUpChoices[ChoiceKey(day, source)] = target;
+                Instance.session.Send(MessageType.FrameUpChoice, -1,
+                    Protocol.Json(choice));
+                return;
+            }
+            SubmitOnlineSeatChoice("frame_up_choice", day, source, target);
         }
 
         public static bool TryGetFrameUpChoice(int day,
@@ -944,13 +954,13 @@ namespace KaitouOnline
         private static void WriteCriminalRecord(int localIndex, bool value)
         {
             if (localIndex == 0)
-            { Player p = Object.FindFirstObjectByType<Player>(); if (p != null) p.hasCriminalRecord = value; }
+            { Player p = Object.FindFirstObjectByType<Player>(); if (p != null) p.ApplyOnlineCriminalRecord(value); }
             else if (localIndex == 1)
-            { Player2 p = Object.FindFirstObjectByType<Player2>(); if (p != null) p.hasCriminalRecord = value; }
+            { Player2 p = Object.FindFirstObjectByType<Player2>(); if (p != null) p.ApplyOnlineCriminalRecord(value); }
             else if (localIndex == 2)
-            { Player3 p = Object.FindFirstObjectByType<Player3>(); if (p != null) p.hasCriminalRecord = value; }
+            { Player3 p = Object.FindFirstObjectByType<Player3>(); if (p != null) p.ApplyOnlineCriminalRecord(value); }
             else
-            { Player4 p = Object.FindFirstObjectByType<Player4>(); if (p != null) p.hasCriminalRecord = value; }
+            { Player4 p = Object.FindFirstObjectByType<Player4>(); if (p != null) p.ApplyOnlineCriminalRecord(value); }
         }
 
         private static void WriteParticipantState(int localIndex,
@@ -1017,9 +1027,20 @@ namespace KaitouOnline
 
         private System.Collections.IEnumerator RevealActionsAfterPlacement()
         {
-            // 通信で選ばれた相手カードが卓上へ移動し終わるまで待ち、
-            // 3日目以降も両端末で同じタイミングに開示する。
-            yield return new WaitForSeconds(0.85f);
+            // 秒数固定では後半の遠い手札が間に合わないため、実際の移動完了を待つ。
+            float timeout = Time.time + 3f;
+            while (Time.time < timeout)
+            {
+                Player local = Object.FindFirstObjectByType<Player>();
+                Player2 remote = Object.FindFirstObjectByType<Player2>();
+                bool moving = local != null && local.SelectedCard != null &&
+                              local.SelectedCard.IsMoving;
+                moving |= remote != null && remote.SelectedCard != null &&
+                          remote.SelectedCard.IsMoving;
+                if (!moving) break;
+                yield return null;
+            }
+            yield return new WaitForSeconds(0.12f);
             CameraController cameraController =
                 Camera.main != null ? Camera.main.GetComponent<CameraController>() : null;
             cameraController?.MoveCamera();

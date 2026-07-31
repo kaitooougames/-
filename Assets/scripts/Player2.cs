@@ -269,6 +269,13 @@ public class Player2 : MonoBehaviour
         HasBeenArrested = false;
     }
 
+    public void ApplyOnlineCriminalRecord(bool value)
+    {
+        hasCriminalRecord = value;
+        if (value && PenaltyCards2.Count == 0)
+        { isFirstOffense = true; ShowPenaltyCard(); }
+    }
+
     public void MoveCardsAfterThiefPhase()
     {
         bool keepAdvanceNotice = SpecialActionCardSystem.IsAdvanceNoticePendingCard(1, selectedCard);
