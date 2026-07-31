@@ -126,10 +126,22 @@ public class Player : MonoBehaviour
 
         if (!hasCriminalRecord)
         {
+            bool noFirstOffenseRule = HandManager.Instance != null &&
+                                      HandManager.Instance.ActionPlayerCount == 2;
             hasCriminalRecord = true;
-            isFirstOffense = true;
+            isFirstOffense = !noFirstOffenseRule;
+            ShowPenaltyCard(!noFirstOffenseRule);
+
+            if (noFirstOffenseRule)
+            {
+                RemoveRandomPlayerCard();
+                Debug.Log($"{name} は2人用ルールにより、最初の逮捕から行動カードを1枚没収されました。");
+                if (SpecialActionCardSystem.IsEliminatedByNormalCards(playerCards))
+                    isEliminated = true;
+                return;
+            }
+
             Debug.Log($"{name} は初犯になりました。次のターン怪盗を出せません。");
-            ShowPenaltyCard();
 
             // 次のカード選択画面を待たず、怪盗カードをその場で暗くして
             // 「初犯中は選択できない」ことを見た目でも分かるようにする。
@@ -178,9 +190,9 @@ public class Player : MonoBehaviour
     }
 
 
-    private void ShowPenaltyCard()
+    private void ShowPenaltyCard(bool showFirstOffenseFace = true)
     {
-        if (isFirstOffense && arrestPenaltyCardPrefab != null)
+        if (arrestPenaltyCardPrefab != null)
         {
             Vector3 spawnPosition = new Vector3(2.5f, 0f, -2.5f); // 生成位置
             Quaternion spawnRotation = Quaternion.Euler(0f, 180f, 0f);
@@ -190,7 +202,7 @@ public class Player : MonoBehaviour
 
             PenaltyCards1.Add(penaltyCard); // 🔹 生成したペナルティカードをリストに追加
             penaltyCardCreatedThisTurn = true;
-            penaltyCard.SetPenaltyState(true);
+            penaltyCard.SetPenaltyState(showFirstOffenseFace);
             penaltyCard.AnimateTo(spawnPosition);
 
             Debug.Log($"{name} に初犯のペナルティカードを表示しました。");
@@ -225,7 +237,12 @@ public class Player : MonoBehaviour
     {
         hasCriminalRecord = value;
         if (value && PenaltyCards1.Count == 0)
-        { isFirstOffense = true; ShowPenaltyCard(); }
+        {
+            bool firstFace = HandManager.Instance == null ||
+                             HandManager.Instance.ActionPlayerCount != 2;
+            isFirstOffense = firstFace;
+            ShowPenaltyCard(firstFace);
+        }
     }
 
     public void MoveCardsAfterThiefPhase()
