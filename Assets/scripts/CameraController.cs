@@ -284,6 +284,7 @@ public class CameraController : MonoBehaviour
 
     private void OnGUI()
     {
+        KaitouGuiFont.Apply();
         DrawPrisonRollMessage();
         DrawDetectiveAnnouncement();
         DrawAppraiserControls();

@@ -502,6 +502,7 @@ CardsCollected:
 
     private void OnGUI()
     {
+        KaitouGuiFont.Apply();
         if (pendingFrameUpCard == null ||
             (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession &&
              pendingFrameUpOwnerId != 0)) return;

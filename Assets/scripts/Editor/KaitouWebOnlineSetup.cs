@@ -10,6 +10,8 @@ using UnityEngine.SceneManagement;
 
 public static class KaitouWebOnlineSetup
 {
+    private const string JapaneseGuiFontPath =
+        "Assets/TextMesh Pro/Fonts/SourceHanSansJP-Regular.otf";
     private const string MenuScene = "Assets/Scenes/MainMenu.unity";
     private const string GameScene = "Assets/Scenes/IntegratedGameScene.unity";
     private const string MacBuildDirectory = "Builds/KaitouOnlineMac";
@@ -109,6 +111,7 @@ public static class KaitouWebOnlineSetup
         PlayerSettings.WebGL.dataCaching = true;
         PlayerSettings.runInBackground = true;
         PlayerSettings.productName = "怪盗ゲーム TREASURE";
+        EnsureJapaneseGuiFontIsPreloaded();
 
         if (Directory.Exists(WebGLBuildDirectory))
             Directory.Delete(WebGLBuildDirectory, true);
@@ -138,6 +141,24 @@ public static class KaitouWebOnlineSetup
         }
         else
             Debug.LogError("Web版の作成に失敗しました：" + report.summary.result);
+    }
+
+    private static void EnsureJapaneseGuiFontIsPreloaded()
+    {
+        Font font = AssetDatabase.LoadAssetAtPath<Font>(JapaneseGuiFontPath);
+        if (font == null)
+        {
+            Debug.LogError("Web用日本語フォントが見つかりません：" + JapaneseGuiFontPath);
+            return;
+        }
+
+        Object[] current = PlayerSettings.GetPreloadedAssets();
+        if (System.Array.IndexOf(current, font) >= 0) return;
+
+        List<Object> assets = new List<Object>(current) { font };
+        PlayerSettings.SetPreloadedAssets(assets.ToArray());
+        AssetDatabase.SaveAssets();
+        Debug.Log("【Web版】日本語GUIフォントをビルドへ追加しました。");
     }
 }
 #endif

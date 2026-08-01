@@ -52,6 +52,7 @@ namespace KaitouOnline
 
         private void OnGUI()
         {
+            KaitouGuiFont.Apply();
             GUIStyle title = new GUIStyle(GUI.skin.label)
             {
                 fontSize = Mathf.RoundToInt(Screen.height * 0.055f),

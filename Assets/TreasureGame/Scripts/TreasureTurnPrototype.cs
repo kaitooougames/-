@@ -78,6 +78,7 @@ public class TreasureTurnPrototype : MonoBehaviour
 
     private void OnGUI()
     {
+        KaitouGuiFont.Apply();
         if (!showStartButton) return;
         EnsureController();
 

@@ -323,6 +323,7 @@ public class HandManager : MonoBehaviour
 
     private void OnGUI()
     {
+        KaitouGuiFont.Apply();
         GUIStyle style = new GUIStyle(GUI.skin.button)
         {
             fontSize = Mathf.RoundToInt(15f * uiScale),
