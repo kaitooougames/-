@@ -794,6 +794,18 @@ public class TreasureController : MonoBehaviour
                 effect != SpecialActionEffect.Balloon || card.Type != TreasureType.Gold);
     }
 
+    public bool CanOnlineCpuSteal(Treasure card) =>
+        Phase == TreasurePhase.Robbing && CanStealCard(card);
+
+    public bool CanOnlineCpuAnalyze(Treasure card)
+    {
+        return Phase == TreasurePhase.Inspecting && !analysisResolving &&
+               analysisRobber != null && card != null &&
+               card.Location == TreasureLocation.Display &&
+               card.Owner != analysisRobber && !analysisSelections.Contains(card) &&
+               analysisSelections.Count < requiredAnalysisCount;
+    }
+
     private IEnumerator ResolveDisplays()
     {
         KaitouOnline.KaitouOnlineGameBridge.ClearDisplayChoiceQueue();

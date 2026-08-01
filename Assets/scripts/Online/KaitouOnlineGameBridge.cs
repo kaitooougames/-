@@ -51,6 +51,7 @@ namespace KaitouOnline
             new Dictionary<string, int[]>();
         private readonly Dictionary<string, int> frameUpChoices =
             new Dictionary<string, int>();
+        private readonly HashSet<int> turnCleanupReleasedDays = new HashSet<int>();
 
         private void Awake()
         {
@@ -112,6 +113,22 @@ namespace KaitouOnline
             Debug.Log("<color=#70E8FF>【オンライン】次の日の行動選択待ちへ移行</color>");
         }
 
+        public static void BeginTurnCleanup(int day)
+        {
+            if (!IsOnlineSession) return;
+            EnsureInstance();
+            if (Instance.session.IsHost &&
+                !Instance.turnCleanupReleasedDays.Contains(day))
+            {
+                OnlineSeatChoice state = new OnlineSeatChoice { day = day };
+                Instance.session.Send(MessageType.TurnCleanup, -1, Protocol.Json(state));
+            }
+        }
+
+        public static bool IsWaitingForTurnCleanup(int day) =>
+            IsOnlineSession && (Instance == null ||
+                !Instance.turnCleanupReleasedDays.Contains(day));
+
         public static void SubmitDisplayTreasure(TreasureGame.Treasure treasure)
         {
             if (!IsOnlineSession || treasure == null) return;
@@ -156,6 +173,111 @@ namespace KaitouOnline
         public static void ClearRobberDisplayChoiceQueue()
         {
             if (Instance != null) Instance.robberDisplayChoices.Clear();
+        }
+
+        // オンラインCPUの宝操作はホストだけが決定し、通常の通信経路へ流す。
+        // 各端末が個別にCPUを動かすと展示完了時刻と回収処理がずれるため、
+        // CPUも人間と同じ「選択メッセージ」を全端末へ配信する。
+        public static bool TryDriveHostCpuTreasureChoice(
+            TreasureGame.TreasureController controller)
+        {
+            if (!IsOnlineSession || Instance == null || controller == null ||
+                !Instance.session.IsHost || Instance.session.CpuPlayers <= 0)
+                return false;
+
+            int firstCpuSeat = Instance.session.ConfirmedHumanPlayers;
+            TreasureGame.Treasure[] treasures =
+                Object.FindObjectsByType<TreasureGame.Treasure>(FindObjectsSortMode.None);
+
+            if (controller.Phase == TreasureGame.TreasurePhase.SelectingDisplays)
+            {
+                foreach (TreasureGame.Treasure treasure in treasures)
+                {
+                    if (treasure == null || treasure.NetworkOwnerSeat < firstCpuSeat ||
+                        !controller.CanInteract(treasure)) continue;
+                    Instance.BroadcastCpuDisplayChoice(treasure);
+                    return true;
+                }
+            }
+            else if (controller.Phase == TreasureGame.TreasurePhase.Robbing &&
+                     controller.ActiveRobber != null)
+            {
+                int robberSeat = ToNetworkSeat(controller.ActiveRobber.PlayerId);
+                if (robberSeat < firstCpuSeat) return false;
+                foreach (TreasureGame.Treasure treasure in treasures)
+                {
+                    if (!controller.CanOnlineCpuSteal(treasure)) continue;
+                    Instance.BroadcastCpuStealChoice(robberSeat, treasure);
+                    return true;
+                }
+            }
+            else if (controller.Phase == TreasureGame.TreasurePhase.Inspecting &&
+                     controller.ActiveRobber != null)
+            {
+                int robberSeat = ToNetworkSeat(controller.ActiveRobber.PlayerId);
+                if (robberSeat < firstCpuSeat) return false;
+                foreach (TreasureGame.Treasure treasure in treasures)
+                {
+                    if (!controller.CanOnlineCpuAnalyze(treasure)) continue;
+                    Instance.BroadcastCpuAnalysisChoice(robberSeat, treasure);
+                    return true;
+                }
+            }
+            else if (controller.Phase == TreasureGame.TreasurePhase.RobberDisplay)
+            {
+                foreach (TreasureGame.Treasure treasure in treasures)
+                {
+                    if (treasure == null || treasure.NetworkOwnerSeat < firstCpuSeat ||
+                        !controller.CanInteract(treasure)) continue;
+                    Instance.BroadcastCpuRobberDisplayChoice(treasure);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void BroadcastCpuDisplayChoice(TreasureGame.Treasure treasure)
+        {
+            TreasureDisplayChoice choice = new TreasureDisplayChoice
+            {
+                day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1,
+                actorSeat = treasure.NetworkOwnerSeat,
+                treasureId = treasure.NetworkId
+            };
+            session.Send(MessageType.TreasureDisplayChoice, -1, Protocol.Json(choice));
+        }
+
+        private void BroadcastCpuStealChoice(int robberSeat, TreasureGame.Treasure treasure)
+        {
+            TreasureStealChoice choice = new TreasureStealChoice
+            {
+                day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1,
+                actorSeat = robberSeat,
+                treasureId = treasure.NetworkId
+            };
+            session.Send(MessageType.TreasureStealChoice, -1, Protocol.Json(choice));
+        }
+
+        private void BroadcastCpuRobberDisplayChoice(TreasureGame.Treasure treasure)
+        {
+            TreasureDisplayChoice choice = new TreasureDisplayChoice
+            {
+                day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1,
+                actorSeat = treasure.NetworkOwnerSeat,
+                treasureId = treasure.NetworkId
+            };
+            session.Send(MessageType.TreasureRobberDisplayChoice, -1, Protocol.Json(choice));
+        }
+
+        private void BroadcastCpuAnalysisChoice(int robberSeat, TreasureGame.Treasure treasure)
+        {
+            TreasureStealChoice choice = new TreasureStealChoice
+            {
+                day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1,
+                actorSeat = robberSeat,
+                treasureId = treasure.NetworkId
+            };
+            session.Send(MessageType.AnalysisTreasureChoice, -1, Protocol.Json(choice));
         }
 
         public static void SubmitStealTreasure(TreasureGame.Treasure treasure)
@@ -343,6 +465,14 @@ namespace KaitouOnline
 
         public static int ToLocalSeat(int networkSeat) =>
             Instance != null ? Instance.LocalIndexForNetworkSeat(networkSeat) : networkSeat;
+
+        public static bool IsHostCpuLocalSeat(int localSeat)
+        {
+            if (!IsOnlineSession || Instance == null || !Instance.session.IsHost) return false;
+            int networkSeat = Instance.NetworkSeatForLocalIndex(localSeat);
+            return networkSeat >= Instance.session.ConfirmedHumanPlayers &&
+                   networkSeat < Instance.session.RoomPlayerCount;
+        }
 
         public static void SubmitDetectiveChoice(int day,
             int localDetectiveSeat, int localTargetSeat)
@@ -638,6 +768,14 @@ namespace KaitouOnline
                     Protocol.Parse<ActionSelectionState>(envelope.payload);
                 if (state.choices == null || state.choices.Length == 0) return;
                 ApplyReadyChoices(state.day, state.choices);
+                return;
+            }
+
+            if (envelope.type == MessageType.TurnCleanup)
+            {
+                OnlineSeatChoice state = Protocol.Parse<OnlineSeatChoice>(envelope.payload);
+                turnCleanupReleasedDays.Add(state.day);
+                Debug.Log($"<color=#70E8FF>【オンライン一斉回収】{state.day}日目</color>");
                 return;
             }
 

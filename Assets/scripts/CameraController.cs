@@ -158,6 +158,14 @@ public class CameraController : MonoBehaviour
                     KaitouOnline.KaitouOnlineGameBridge.SubmitDetectiveChoice(
                         day, detectiveSeat, detectiveChosenSeat);
                 }
+                else if (KaitouOnline.KaitouOnlineGameBridge.IsHostCpuLocalSeat(
+                             detectiveSeat))
+                {
+                    int cpuTarget = detectiveTargetSeats[
+                        Random.Range(0, detectiveTargetSeats.Count)];
+                    KaitouOnline.KaitouOnlineGameBridge.SubmitDetectiveChoice(
+                        day, detectiveSeat, cpuTarget);
+                }
                 int networkTarget = -1;
                 while (!KaitouOnline.KaitouOnlineGameBridge.TryGetDetectiveChoice(
                            day, networkDetective, out networkTarget))
@@ -392,6 +400,17 @@ public class CameraController : MonoBehaviour
                     KaitouOnline.KaitouOnlineGameBridge.SubmitAppraiserTypeChoice(
                         day, seat, appraiserChosenType);
                 }
+                else if (KaitouOnline.KaitouOnlineGameBridge.IsHostCpuLocalSeat(seat))
+                {
+                    TreasureGame.TreasureType[] cpuTypes =
+                    {
+                        TreasureGame.TreasureType.Relic,
+                        TreasureGame.TreasureType.Jewel,
+                        TreasureGame.TreasureType.Painting
+                    };
+                    KaitouOnline.KaitouOnlineGameBridge.SubmitAppraiserTypeChoice(
+                        day, seat, (int)cpuTypes[Random.Range(0, cpuTypes.Length)]);
+                }
                 int typeValue = -1;
                 while (!KaitouOnline.KaitouOnlineGameBridge.TryGetAppraiserTypeChoice(
                            day, networkAppraiser, out typeValue))
@@ -465,7 +484,18 @@ public class CameraController : MonoBehaviour
         foreach (KeyValuePair<int, HashSet<TreasureGame.TreasureType>> entry in rearrangeTypesByPlayer)
         {
             if (entry.Key == 0) continue;
-            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession) continue;
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                if (KaitouOnline.KaitouOnlineGameBridge.IsHostCpuLocalSeat(entry.Key))
+                {
+                    treasureController.ShuffleAppraiserDisplay(entry.Key, entry.Value);
+                    KaitouOnline.KaitouOnlineGameBridge.SubmitAppraiserOrder(
+                        handManager != null ? handManager.CurrentDay : 1,
+                        entry.Key,
+                        treasureController.GetDisplayedTreasureNetworkOrder(entry.Key));
+                }
+                continue;
+            }
             treasureController.ShuffleAppraiserDisplay(entry.Key, entry.Value);
             cpuRearrangerCount++;
         }
@@ -766,9 +796,16 @@ public class CameraController : MonoBehaviour
 
         SyncEliminatedPlayers(treasureController);
 
+        float nextCpuChoiceTime = 0f;
         while (treasureController.Phase == TreasureGame.TreasurePhase.SelectingDisplays ||
                treasureController.Phase == TreasureGame.TreasurePhase.Displaying)
+        {
+            if (Time.time >= nextCpuChoiceTime &&
+                KaitouOnline.KaitouOnlineGameBridge.TryDriveHostCpuTreasureChoice(
+                    treasureController))
+                nextCpuChoiceTime = Time.time + 0.55f;
             yield return null;
+        }
     }
 
     private IEnumerator MoveCameraCoroutine(Vector3 position, Quaternion rotation)
@@ -942,6 +979,10 @@ public class CameraController : MonoBehaviour
         {
             if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
             {
+                if (KaitouOnline.KaitouOnlineGameBridge.TryDriveHostCpuTreasureChoice(
+                        treasureController))
+                    yield return new WaitForSeconds(0.55f);
+                else
                 yield return null;
                 continue;
             }
@@ -1082,6 +1123,13 @@ public class CameraController : MonoBehaviour
     private IEnumerator FinishActionTurn()
     {
         yield return StartCoroutine(RollPrisonReleaseDice());
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+        {
+            int cleanupDay = handManager != null ? handManager.CurrentDay : 1;
+            KaitouOnline.KaitouOnlineGameBridge.BeginTurnCleanup(cleanupDay);
+            while (KaitouOnline.KaitouOnlineGameBridge.IsWaitingForTurnCleanup(cleanupDay))
+                yield return null;
+        }
         handManager.MoveCardsAfterThiefPhase();
 
         cardInteraction.MoveCardsAfterThiefPhase();
