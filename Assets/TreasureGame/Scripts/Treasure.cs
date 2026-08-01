@@ -257,7 +257,11 @@ public class Treasure : MonoBehaviour
         if (!handPointerDown) return;
         handPointerDown = false;
         TreasureTurnPrototype.Instance?.EndCardHandGrip();
-        if (!draggingHand && interactable) controller?.HandleTreasureClick(this);
+        if (!draggingHand && interactable)
+        {
+            CardClickAudio.Play();
+            controller?.HandleTreasureClick(this);
+        }
         draggingHand = false;
     }
 

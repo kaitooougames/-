@@ -258,6 +258,8 @@ public class CardInteraction : MonoBehaviour
                 return;
             }
 
+            CardClickAudio.Play();
+
             if (isClickable)
             {
                 selectedHoverLocked = true;
@@ -282,6 +284,7 @@ public class CardInteraction : MonoBehaviour
         }
         else // 展示カードや檻カードなど
         {
+            CardClickAudio.Play();
             // 🔽 怪盗関連の選択値をリセット
             selectedStealNumber = 0;
             numberSelected = false;
