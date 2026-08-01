@@ -900,10 +900,6 @@ public class TreasureController : MonoBehaviour
             stolenByRobber.Add(ActiveRobber, stolen);
         }
         stolen.Add(card);
-        stolenFocusOwner = ActiveRobber;
-        stolenFocusCards.Add(card);
-        // 盗品リストへ入った瞬間に、盗品以外の手札を暗転させる。
-        RefreshInteraction();
         treasuresInTransit.Add(card);
         ActiveRobber.SortHandForLayout();
         ActiveRobber.EnsureCardVisible(card);
@@ -911,8 +907,6 @@ public class TreasureController : MonoBehaviour
         Quaternion slideRotation = card.transform.rotation;
         Vector3 slideTarget = GetRobberyDestination(ActiveRobber.PlayerId, card.transform.position.y);
         card.SetLocation(TreasureLocation.Hand);
-        // LocationがHandになってから再評価しないと、別ビルド側では暗転対象が
-        // 展示品のままと判定されるフレームが残る。
         RefreshInteraction();
         card.AnimateTo(slideTarget, slideRotation, moveDuration);
         yield return new WaitForSeconds(moveDuration);
@@ -920,6 +914,10 @@ public class TreasureController : MonoBehaviour
         // 手札へ到着してから初めて、他の手札と同じ表向き・角度・高さに揃える。
         card.SetFaceUp(true);
         card.MoveTo(p, r);
+        // 移動中は暗転させない。手札へ到着した時点から、
+        // 盗品以外の手札だけを暗くする。
+        stolenFocusOwner = ActiveRobber;
+        stolenFocusCards.Add(card);
         RefreshInteraction();
         ActiveRobber.AnimateHandLayout(moveDuration * 0.35f);
         yield return new WaitForSeconds(moveDuration * 0.35f);
@@ -1410,6 +1408,12 @@ public class TreasureController : MonoBehaviour
                 displaySelections.TryGetValue(treasure.Owner,
                     out List<Treasure> ownerDisplaySelections) &&
                 ownerDisplaySelections.Contains(treasure);
+            bool selectedForRobberDisplay = Phase == TreasurePhase.RobberDisplay &&
+                treasure.Location == TreasureLocation.Hand &&
+                treasure.Owner != null &&
+                robberDisplaySelections.TryGetValue(treasure.Owner,
+                    out List<Treasure> ownerRobberDisplaySelections) &&
+                ownerRobberDisplaySelections.Contains(treasure);
             bool selectedForAnalysis = analysisSelections.Contains(treasure);
             bool forceAnalysisDim = false;
             if (analysisActive && treasure.Location == TreasureLocation.Display)
@@ -1430,9 +1434,10 @@ public class TreasureController : MonoBehaviour
             bool forceNonStolenHandDim = hasPendingStolenDisplay &&
                 treasure.Owner == stolenFocusOwner &&
                 treasure.Location == TreasureLocation.Hand &&
+                !treasuresInTransit.Contains(treasure) &&
                 !stolenFocusCards.Contains(treasure);
             treasure.SetForcedDim(forceAnalysisDim || forceNonStolenHandDim ||
-                                  selectedForDisplay);
+                                  selectedForDisplay || selectedForRobberDisplay);
             bool visibleToPlayerOne = FreeInteractionMode || treasuresInTransit.Contains(treasure) ||
                 treasure.Location == TreasureLocation.Display ||
                 (treasure.Owner != null && treasure.Owner.PlayerId == 0);
@@ -1452,7 +1457,7 @@ public class TreasureController : MonoBehaviour
             {
                 bool isStolenCard = stolenFocusCards.Contains(treasure);
                 shouldDim = treasure.Owner == stolenFocusOwner && treasure.Location == TreasureLocation.Hand &&
-                    !isStolenCard;
+                    !treasuresInTransit.Contains(treasure) && !isStolenCard;
             }
             treasure.SetInteractionState(canClick, shouldDim);
         }
