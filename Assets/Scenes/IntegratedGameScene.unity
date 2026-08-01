@@ -1093,7 +1093,7 @@ MonoBehaviour:
   actionPlayerCount: 4
   uiScale: 2
   actionButtonOffset: {x: 0, y: 0}
-  displayButtonOffset: {x: 0, y: -105}
+  displayButtonOffset: {x: 0, y: 0}
   playerCountsOffset: {x: 0, y: -40}
   dayLabelOffset: {x: -240, y: 16}
 --- !u!4 &270204749
@@ -1504,7 +1504,7 @@ MonoBehaviour:
   actionPlayerCount: 4
   uiScale: 2
   actionButtonOffset: {x: 0, y: 0}
-  displayButtonOffset: {x: 0, y: -105}
+  displayButtonOffset: {x: 0, y: 0}
   playerCountsOffset: {x: 0, y: -40}
   dayLabelOffset: {x: -240, y: 16}
 --- !u!114 &330585550
@@ -2224,7 +2224,7 @@ MonoBehaviour:
   actionPlayerCount: 4
   uiScale: 2
   actionButtonOffset: {x: 0, y: 0}
-  displayButtonOffset: {x: 0, y: -105}
+  displayButtonOffset: {x: 0, y: 0}
   playerCountsOffset: {x: 0, y: -40}
   dayLabelOffset: {x: -240, y: 16}
 --- !u!4 &456589255

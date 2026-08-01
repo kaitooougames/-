@@ -19,7 +19,7 @@ public class HandManager : MonoBehaviour
     [Header("画面UI調整")]
     [SerializeField, Range(1f, 3f)] private float uiScale = 2f;
     [SerializeField] private Vector2 actionButtonOffset = Vector2.zero;
-    [SerializeField] private Vector2 displayButtonOffset = new Vector2(0f, -105f);
+    [SerializeField] private Vector2 displayButtonOffset = Vector2.zero;
     [SerializeField] private Vector2 playerCountsOffset = new Vector2(0f, -40f);
     [SerializeField] private Vector2 dayLabelOffset = new Vector2(-240f, 16f);
     [Header("テスト用")]
@@ -331,11 +331,13 @@ public class HandManager : MonoBehaviour
             alignment = TextAnchor.MiddleCenter
         };
 
-        float width = 38f * uiScale;
-        float height = 155f * uiScale;
-        // お宝手札ボタンのすぐ上に並べる。
+        float width = 56f * uiScale;
+        float height = 145f * uiScale;
+        float bottomGap = 75f * uiScale;
+        // お宝手札ボタンの上へ、画面下基準で並べる。
         Rect buttonRect = new Rect(actionButtonOffset.x * uiScale,
-            (Screen.height - height) * 0.5f - height - 10f + actionButtonOffset.y * uiScale,
+            Screen.height - height * 2f - bottomGap - 8f * uiScale +
+                actionButtonOffset.y * uiScale,
             width, height);
         CameraController cameraController = Camera.main != null
             ? Camera.main.GetComponent<CameraController>()
@@ -345,7 +347,7 @@ public class HandManager : MonoBehaviour
         GUI.enabled = !cardSelected && !gameFinished && !displayViewLocked;
         string label = actionHandVisible
             ? "閉\nじ\nる\n◀"
-            : "行\n動\nカ\nー\nド\nを\n見\nる\n▶";
+            : "行\n動\nを\n見\nる\n▶";
         if (GUI.Button(buttonRect, label, style)) ToggleActionHand();
         GUI.enabled = true;
         HandleActionHandScroll();
@@ -532,12 +534,14 @@ public class HandManager : MonoBehaviour
             !cameraController.IsCameraMoving;
         GUI.enabled = viewing || canOpen;
 
-        float width = 280f * uiScale;
-        float height = 50f * uiScale;
-        float y = Screen.height + displayButtonOffset.y * uiScale;
-        // 真贋チェックは手札中央を塞がないよう、画面右下寄りへ置く。
-        float firstX = Screen.width - width - 14f * uiScale + displayButtonOffset.x * uiScale;
-        string viewLabel = viewing ? "展示場を見るのをやめる" : "自分の展示場を見る（真贋チェック）";
+        float width = 220f * uiScale;
+        float height = 48f * uiScale;
+        float y = Screen.height - height - 14f * uiScale + displayButtonOffset.y * uiScale;
+        // 旧ランダムお宝ターンボタンの左下位置を真贋チェックに使用する。
+        float firstX = 14f * uiScale + displayButtonOffset.x * uiScale;
+        string viewLabel = viewing
+            ? "展示場を見るのをやめる"
+            : "展示場を見る\n（真贋チェック）";
         if (GUI.Button(new Rect(firstX, y, width, height), viewLabel, buttonStyle))
         {
             if (!viewing)

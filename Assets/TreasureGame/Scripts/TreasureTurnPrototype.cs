@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace TreasureGame
 {
@@ -122,38 +123,38 @@ public class TreasureTurnPrototype : MonoBehaviour
             GUI.enabled = true;
         }
 
-        bool canStart = !turnRunning &&
-            (treasureController == null || treasureController.Phase == TreasurePhase.Waiting);
-        GUI.enabled = canStart;
-
         GUIStyle style = new GUIStyle(GUI.skin.button)
         {
-            fontSize = Mathf.RoundToInt(14f * uiScale),
+            fontSize = Mathf.RoundToInt(15f * uiScale),
             fontStyle = FontStyle.Bold
         };
-        string label = canStart ? "ランダムお宝ターン開始" : "お宝ターン進行中…";
-        float width = 210f * uiScale;
-        float height = 42f * uiScale;
-        Rect buttonRect = new Rect(buttonMargin * uiScale,
-            Screen.height - height - buttonMargin * uiScale, width, height);
-        if (GUI.Button(buttonRect, label, style)) RunRandomTurn();
+
+        if (!KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+        {
+            GUI.enabled = true;
+            Rect exitRect = new Rect(buttonMargin * uiScale, 70f * uiScale,
+                190f * uiScale, 46f * uiScale);
+            if (GUI.Button(exitRect, "終了してホームへ", style))
+                SceneManager.LoadScene("MainMenu");
+        }
 
         if (treasureController != null)
         {
             GUI.enabled = true;
             GUIStyle treasureStyle = new GUIStyle(GUI.skin.button)
             {
-                fontSize = Mathf.RoundToInt(15f * uiScale),
+                fontSize = Mathf.RoundToInt(17f * uiScale),
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter
             };
             string treasureLabel = treasureController.PlayerOneHandVisible
                 ? "閉\nじ\nる\n◀"
                 : "宝\nを\n見\nる\n▶";
-            float treasureHeight = 155f * uiScale;
+            float treasureHeight = 145f * uiScale;
+            float bottomGap = 75f * uiScale;
             Rect treasureButton = new Rect(treasureButtonOffset.x * uiScale,
-                (Screen.height - treasureHeight) * 0.5f + treasureButtonOffset.y * uiScale,
-                38f * uiScale, treasureHeight);
+                Screen.height - treasureHeight - bottomGap + treasureButtonOffset.y * uiScale,
+                56f * uiScale, treasureHeight);
             global::CameraController cameraController = Camera.main != null
                 ? Camera.main.GetComponent<global::CameraController>()
                 : null;
@@ -172,16 +173,6 @@ public class TreasureTurnPrototype : MonoBehaviour
 
             if (treasureController.PlayerOneHandVisible) HandleHandScrollInput();
 
-            GUI.enabled = true;
-            GUI.enabled = treasureController.Phase == TreasurePhase.Waiting;
-            string freeLabel = treasureController.FreeInteractionMode ? "FREE：ON" : "FREE：OFF";
-            if (GUI.Button(new Rect(Screen.width - 118f * uiScale, 14f * uiScale,
-                104f * uiScale, 38f * uiScale), freeLabel, style))
-                treasureController.ToggleFreeInteractionMode();
-            if (GUI.Button(new Rect(Screen.width - 158f * uiScale, 60f * uiScale,
-                144f * uiScale, 38f * uiScale), "P1 手札を全部展示", style))
-                treasureController.DisplayAllTreasures(0);
-
             GUI.enabled = !turnRunning && (treasureController.Phase == TreasurePhase.Waiting ||
                 treasureController.Phase == TreasurePhase.GameOver);
             float playerButtonY = 106f * uiScale;
@@ -197,12 +188,6 @@ public class TreasureTurnPrototype : MonoBehaviour
                     global::HandManager.SetPlayerCountGlobally(count);
                 }
             }
-
-            GUI.enabled = true;
-            if (GUI.Button(new Rect(Screen.width - 158f * uiScale, 148f * uiScale,
-                144f * uiScale, 38f * uiScale),
-                "全カードをめくる", style))
-                treasureController.TestRevealAllDisplayedTreasures();
         }
 
         GUI.enabled = true;

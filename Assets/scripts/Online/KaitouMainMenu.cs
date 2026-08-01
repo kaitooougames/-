@@ -140,7 +140,7 @@ namespace KaitouOnline
                     $"参加コード：{session.JoinCode}　接続：{session.ConnectedPlayers}/{session.RoomPlayerCount}", label);
                 if (MenuButton(new Rect(x + width - clipboardButtonWidth,
                         Screen.height * 0.76f, clipboardButtonWidth, 48),
-                        "コードをコピー", button))
+                        "コピー", button))
                     CopyJoinCode(session.JoinCode);
                 GUI.enabled = session.IsHost &&
                               session.ConnectedPlayers >= session.RoomPlayerCount;
