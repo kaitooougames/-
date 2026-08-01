@@ -118,9 +118,9 @@ public class TreasureTurnPrototype : MonoBehaviour
                 Screen.height * 0.72f,
                 260f * uiScale, 58f * uiScale);
             if (GUI.Button(replayRect,
-                    host ? "もう一度遊ぶ" : "ホストの再戦操作を待っています",
+                    host ? "接続を維持してロビーへ" : "ホストがロビーへ戻すのを待っています",
                     replayStyle))
-                KaitouOnline.KaitouOnlineGameBridge.RequestRestartGame();
+                KaitouOnline.KaitouOnlineSession.Instance?.ReturnToLobby();
             GUI.enabled = true;
         }
 

@@ -73,6 +73,32 @@ public class Player3 : MonoBehaviour
         card.SelectedNumber = 10;
     }
 
+    public void SelectOnlineCard(int specialEffect, bool exhibit, bool thief, bool cage,
+        int declaredNumber)
+    {
+        CardInteraction match = player3Cards.Find(card => card != null &&
+            (int)card.specialEffect == specialEffect && card.isExhibit == exhibit &&
+            card.isPhantomThief == thief && card.isCage == cage);
+        if (match == null) return;
+        selectedCard = match;
+        SelectedNumber = thief ? declaredNumber : 0;
+        match.SelectedNumber = SelectedNumber;
+        SpecialActionCardSystem.NotifySelected(2, match);
+        match.MoveTo(new Vector3(-1f, 0f, 0f), 2.5f);
+    }
+
+    public void SelectOnlinePass()
+    {
+        selectedCard = null;
+        SelectedNumber = 0;
+    }
+
+    public void SetCpuDeclaredNumber(int number)
+    {
+        SelectedNumber = number;
+        if (selectedCard != null) selectedCard.SelectedNumber = number;
+    }
+
     private void OnEnable()
     {
         CardInteraction.OnAllCardsFlipped -= OnCardsRevealed; // 一度解除してから登録

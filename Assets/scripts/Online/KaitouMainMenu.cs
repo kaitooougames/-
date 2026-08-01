@@ -19,7 +19,7 @@ namespace KaitouOnline
         private KaitouOnlineSession session;
         private string joinCode = "";
         private string status = "遊び方を選んでください。";
-        private int requestedPlayers = 2;
+        private int requestedCpuPlayers;
         private bool onlineMenu;
         private AudioSource uiAudio;
         private AudioClip clickClip;
@@ -31,6 +31,16 @@ namespace KaitouOnline
             uiAudio.playOnAwake = false;
             uiAudio.volume = 0.42f;
             clickClip = CreateClickClip();
+            if (KaitouOnlineSession.Instance != null &&
+                KaitouOnlineSession.Instance.IsOnline)
+            {
+                onlineMenu = true;
+                EnsureSession();
+                requestedCpuPlayers = session.CpuPlayers;
+                status = session.IsHost
+                    ? "接続を維持しています。次のCPU人数を選んでください。"
+                    : "接続を維持しています。ホストの設定を待っています。";
+            }
         }
 
         private void OnDestroy()
@@ -101,33 +111,24 @@ namespace KaitouOnline
             }
 
             GUI.Label(new Rect(x, Screen.height * 0.24f, width, 58), status, label);
-            GUI.Label(new Rect(x, Screen.height * 0.33f, width, 42),
-                $"部屋人数：{requestedPlayers}人", label);
-            for (int count = 2; count <= 4; count++)
-            {
-                if (MenuButton(new Rect(x + (count - 2) * (width / 3f), Screen.height * 0.39f,
-                        width / 3f - 8f, 55), count + "人", button))
-                    requestedPlayers = count;
-            }
-
-            if (MenuButton(new Rect(x, Screen.height * 0.48f, width, 64), "部屋を作る", button))
+            if (MenuButton(new Rect(x, Screen.height * 0.39f, width, 64), "2人用の部屋を作る", button))
             {
                 EnsureSession();
-                session.CreateRoom(requestedPlayers);
+                session.CreateRoom(2);
             }
 
             float clipboardButtonWidth = Mathf.Min(145f, width * 0.28f);
             float codeFieldWidth = width - clipboardButtonWidth - 8f;
-            joinCode = GUI.TextField(new Rect(x, Screen.height * 0.59f, codeFieldWidth, 55),
+            joinCode = GUI.TextField(new Rect(x, Screen.height * 0.50f, codeFieldWidth, 55),
                 joinCode, 12, new GUIStyle(GUI.skin.textField)
                 {
                     fontSize = Mathf.RoundToInt(Screen.height * 0.026f),
                     alignment = TextAnchor.MiddleCenter
                 });
-            if (MenuButton(new Rect(x + codeFieldWidth + 8f, Screen.height * 0.59f,
+            if (MenuButton(new Rect(x + codeFieldWidth + 8f, Screen.height * 0.50f,
                     clipboardButtonWidth, 55), "貼り付け", button))
                 PasteJoinCode();
-            if (MenuButton(new Rect(x, Screen.height * 0.67f, width, 64), "参加コードで入る", button))
+            if (MenuButton(new Rect(x, Screen.height * 0.58f, width, 64), "参加コードで入る", button))
             {
                 EnsureSession();
                 session.JoinRoom(joinCode);
@@ -135,21 +136,42 @@ namespace KaitouOnline
 
             if (session != null && !string.IsNullOrEmpty(session.JoinCode))
             {
-                GUI.Label(new Rect(x, Screen.height * 0.76f,
+                GUI.Label(new Rect(x, Screen.height * 0.67f,
                         width - clipboardButtonWidth - 8f, 48),
-                    $"参加コード：{session.JoinCode}　接続：{session.ConnectedPlayers}/{session.RoomPlayerCount}", label);
+                    $"参加コード：{session.JoinCode}　接続：{session.ConnectedPlayers}/{session.RequiredHumanPlayers}", label);
                 if (MenuButton(new Rect(x + width - clipboardButtonWidth,
-                        Screen.height * 0.76f, clipboardButtonWidth, 48),
+                        Screen.height * 0.67f, clipboardButtonWidth, 48),
                         "コピー", button))
                     CopyJoinCode(session.JoinCode);
+
+                if (session.ConnectedPlayers >= session.RequiredHumanPlayers)
+                {
+                    GUI.Label(new Rect(x, Screen.height * 0.73f, width, 38),
+                        $"今回の追加CPU：{requestedCpuPlayers}人", label);
+                    GUI.enabled = session.IsHost;
+                    int maxCpu = Mathf.Max(0, 4 - session.ConnectedPlayers);
+                    float optionWidth = width / (maxCpu + 1f);
+                    for (int cpu = 0; cpu <= maxCpu; cpu++)
+                    {
+                        string cpuLabel = cpu == 0 ? "CPUなし" : $"CPU＋{cpu}人";
+                        if (MenuButton(new Rect(x + cpu * optionWidth,
+                                Screen.height * 0.77f, optionWidth - 8f, 48),
+                                cpuLabel, button))
+                        {
+                            requestedCpuPlayers = cpu;
+                            session.SetCpuPlayers(cpu);
+                        }
+                    }
+                    GUI.enabled = true;
+                }
                 GUI.enabled = session.IsHost &&
-                              session.ConnectedPlayers >= session.RoomPlayerCount;
-                if (MenuButton(new Rect(x, Screen.height * 0.83f, width, 64), "対戦開始", button))
+                              session.ConnectedPlayers >= session.RequiredHumanPlayers;
+                if (MenuButton(new Rect(x, Screen.height * 0.84f, width, 58), "対戦開始", button))
                 {
                     StartGameState start = new StartGameState
                     {
                         sceneName = localSceneName,
-                        playerCount = session.RoomPlayerCount,
+                        playerCount = session.ConnectedPlayers + session.CpuPlayers,
                         randomSeed = Random.Range(1, int.MaxValue)
                     };
                     session.Send(MessageType.StartGame, -1, Protocol.Json(start));
@@ -229,13 +251,16 @@ namespace KaitouOnline
             if (envelope.type == MessageType.LobbyState)
             {
                 LobbyState state = Protocol.Parse<LobbyState>(envelope.payload);
-                requestedPlayers = state.playerCount;
-                status = $"参加者を待っています（{state.connectedPlayers}/{state.playerCount}）";
+                requestedCpuPlayers = state.cpuPlayers;
+                status = state.connectedPlayers >= state.requiredHumanPlayers
+                    ? $"接続完了。CPUを追加するか選んでください（ゲーム{state.playerCount}人）"
+                    : $"参加者を待っています（{state.connectedPlayers}/{state.requiredHumanPlayers}）";
             }
             else if (envelope.type == MessageType.StartGame)
             {
                 StartGameState start = Protocol.Parse<StartGameState>(envelope.payload);
-                requestedPlayers = Mathf.Clamp(start.playerCount, 2, 4);
+                requestedCpuPlayers = Mathf.Max(0,
+                    start.playerCount - (session != null ? session.ConnectedPlayers : 2));
                 Random.InitState(start.randomSeed);
                 SceneManager.LoadScene(string.IsNullOrEmpty(start.sceneName)
                     ? localSceneName : start.sceneName);

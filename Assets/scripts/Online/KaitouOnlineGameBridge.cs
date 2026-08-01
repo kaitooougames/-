@@ -625,6 +625,7 @@ namespace KaitouOnline
                 }
                 hostChoices[choice.seat] = choice;
                 Debug.Log($"【オンライン選択受信】P{choice.seat + 1}：{CardLabel(choice)}");
+                EnsureHostCpuChoices(currentDay);
                 if (hostChoices.Count >= session.RoomPlayerCount) BroadcastReady();
                 return;
             }
@@ -919,6 +920,12 @@ namespace KaitouOnline
         private int LocalIndexForNetworkSeat(int networkSeat)
         {
             int localSeat = session.LocalSeat;
+            if (session.RoomPlayerCount == 3)
+            {
+                if (networkSeat == localSeat) return 0;
+                if (networkSeat < session.RequiredHumanPlayers) return 2;
+                return 3;
+            }
             if (networkSeat == localSeat) return 0;
             if (networkSeat == 0) return localSeat;
             return networkSeat;
@@ -927,6 +934,12 @@ namespace KaitouOnline
         private int NetworkSeatForLocalIndex(int localIndex)
         {
             int localSeat = session.LocalSeat;
+            if (session.RoomPlayerCount == 3)
+            {
+                if (localIndex == 0) return localSeat;
+                if (localIndex == 2) return localSeat == 0 ? 1 : 0;
+                if (localIndex == 3) return 2;
+            }
             if (localIndex == 0) return localSeat;
             if (localIndex == localSeat) return 0;
             return localIndex;
@@ -1018,6 +1031,42 @@ namespace KaitouOnline
                 Protocol.Json(new ActionSelectionState { day = day, choices = ordered }));
         }
 
+        private void EnsureHostCpuChoices(int day)
+        {
+            if (!session.IsHost || hostChoices.Count < session.RequiredHumanPlayers) return;
+            for (int networkSeat = session.RequiredHumanPlayers;
+                 networkSeat < session.RoomPlayerCount; networkSeat++)
+            {
+                if (hostChoices.ContainsKey(networkSeat)) continue;
+                int localIndex = LocalIndexForNetworkSeat(networkSeat);
+                CardInteraction selected = null;
+                int declaredNumber = 0;
+                if (localIndex == 2)
+                {
+                    Player3 cpu = FindFirstObjectByType<Player3>();
+                    cpu?.SelectRandomCard();
+                    selected = cpu?.SelectedCard;
+                    declaredNumber = selected != null && selected.isPhantomThief
+                        ? selected.RandomDeclaredNumber() : 0;
+                    cpu?.SetCpuDeclaredNumber(declaredNumber);
+                }
+                else if (localIndex == 3)
+                {
+                    Player4 cpu = FindFirstObjectByType<Player4>();
+                    cpu?.SelectRandomCard();
+                    selected = cpu?.SelectedCard;
+                    declaredNumber = selected != null && selected.isPhantomThief
+                        ? selected.RandomDeclaredNumber() : 0;
+                    cpu?.SetCpuDeclaredNumber(declaredNumber);
+                }
+                hostChoices[networkSeat] = selected != null
+                    ? Describe(selected, networkSeat, declaredNumber)
+                    : new ActionCardChoice { day = day, seat = networkSeat };
+                Debug.Log($"【オンラインCPU選択】P{networkSeat + 1}：" +
+                          CardLabel(hostChoices[networkSeat]));
+            }
+        }
+
         private void ApplyReadyChoices(int snapshotDay, ActionCardChoice[] choices)
         {
             if (revealStarted) return;
@@ -1038,12 +1087,12 @@ namespace KaitouOnline
             foreach (ActionCardChoice choice in choices)
             {
                 if (choice.seat == session.LocalSeat) continue;
-                // 2人オンラインでは、相手を既存盤のPlayer2として表示する。
-                if (session.RoomPlayerCount == 2)
+                int localIndex = LocalIndexForNetworkSeat(choice.seat);
+                bool isPass = choice.specialEffect == 0 && !choice.isExhibit &&
+                              !choice.isThief && !choice.isCage;
+                if (localIndex == 1)
                 {
                     Player2 opponent = FindFirstObjectByType<Player2>();
-                    bool isPass = choice.specialEffect == 0 && !choice.isExhibit &&
-                                  !choice.isThief && !choice.isCage;
                     if (isPass) opponent?.SelectOnlinePass();
                     else if (choice.specialEffect == (int)SpecialActionEffect.AdvanceNotice &&
                              SpecialActionCardSystem.TryGetActiveAdvanceNotice(
@@ -1051,6 +1100,20 @@ namespace KaitouOnline
                         opponent?.RestoreAdvanceNotice(heldNotice);
                     else opponent?.SelectOnlineCard(choice.specialEffect, choice.isExhibit,
                             choice.isThief, choice.isCage, choice.declaredNumber);
+                }
+                else if (localIndex == 2)
+                {
+                    Player3 participant = FindFirstObjectByType<Player3>();
+                    if (isPass) participant?.SelectOnlinePass();
+                    else participant?.SelectOnlineCard(choice.specialEffect, choice.isExhibit,
+                        choice.isThief, choice.isCage, choice.declaredNumber);
+                }
+                else if (localIndex == 3)
+                {
+                    Player4 participant = FindFirstObjectByType<Player4>();
+                    if (isPass) participant?.SelectOnlinePass();
+                    else participant?.SelectOnlineCard(choice.specialEffect, choice.isExhibit,
+                        choice.isThief, choice.isCage, choice.declaredNumber);
                 }
             }
 
