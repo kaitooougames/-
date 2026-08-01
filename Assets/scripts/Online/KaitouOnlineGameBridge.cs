@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -202,7 +203,7 @@ namespace KaitouOnline
             else if (controller.Phase == TreasureGame.TreasurePhase.Robbing &&
                      controller.ActiveRobber != null)
             {
-                int robberSeat = ToNetworkSeat(controller.ActiveRobber.PlayerId);
+                int robberSeat = ToNetworkTreasureSeat(controller.ActiveRobber.PlayerId);
                 if (robberSeat < firstCpuSeat) return false;
                 foreach (TreasureGame.Treasure treasure in treasures)
                 {
@@ -214,7 +215,7 @@ namespace KaitouOnline
             else if (controller.Phase == TreasureGame.TreasurePhase.Inspecting &&
                      controller.ActiveRobber != null)
             {
-                int robberSeat = ToNetworkSeat(controller.ActiveRobber.PlayerId);
+                int robberSeat = ToNetworkTreasureSeat(controller.ActiveRobber.PlayerId);
                 if (robberSeat < firstCpuSeat) return false;
                 foreach (TreasureGame.Treasure treasure in treasures)
                 {
@@ -466,10 +467,26 @@ namespace KaitouOnline
         public static int ToLocalSeat(int networkSeat) =>
             Instance != null ? Instance.LocalIndexForNetworkSeat(networkSeat) : networkSeat;
 
+        // 宝Controllerは3人時も内部Playerを0,1,2の連続番号で保持する。
+        // 行動カードの物理席（0,2,3）とは分けて変換する。
+        public static int ToLocalTreasureSeat(int networkSeat) =>
+            Instance != null ? Instance.NetworkSeatOrder(networkSeat) : networkSeat;
+
+        public static int ToNetworkTreasureSeat(int localTreasureSeat) =>
+            Instance != null ? Instance.NetworkSeatAtOrder(localTreasureSeat) : localTreasureSeat;
+
         public static bool IsHostCpuLocalSeat(int localSeat)
         {
             if (!IsOnlineSession || Instance == null || !Instance.session.IsHost) return false;
             int networkSeat = Instance.NetworkSeatForLocalIndex(localSeat);
+            return networkSeat >= Instance.session.ConfirmedHumanPlayers &&
+                   networkSeat < Instance.session.RoomPlayerCount;
+        }
+
+        public static bool IsHostCpuTreasureSeat(int localTreasureSeat)
+        {
+            if (!IsOnlineSession || Instance == null || !Instance.session.IsHost) return false;
+            int networkSeat = Instance.NetworkSeatAtOrder(localTreasureSeat);
             return networkSeat >= Instance.session.ConfirmedHumanPlayers &&
                    networkSeat < Instance.session.RoomPlayerCount;
         }
@@ -563,7 +580,7 @@ namespace KaitouOnline
             AppraiserOrderState state = new AppraiserOrderState
             {
                 day = day,
-                actorSeat = ToNetworkSeat(localPlayerIndex),
+                actorSeat = ToNetworkTreasureSeat(localPlayerIndex),
                 treasureIds = treasureIds
             };
             Instance.session.SendAction(new ActionRequest
@@ -767,7 +784,7 @@ namespace KaitouOnline
                 ActionSelectionState state =
                     Protocol.Parse<ActionSelectionState>(envelope.payload);
                 if (state.choices == null || state.choices.Length == 0) return;
-                ApplyReadyChoices(state.day, state.choices);
+                ApplyReadyChoices(state.day, state.revealAtServerTime, state.choices);
                 return;
             }
 
@@ -1182,7 +1199,13 @@ namespace KaitouOnline
                 if (!hostChoices.TryGetValue(seat, out ordered[seat]) ||
                     ordered[seat].day != day) return;
             session.Send(MessageType.StateSnapshot, -1,
-                Protocol.Json(new ActionSelectionState { day = day, choices = ordered }));
+                Protocol.Json(new ActionSelectionState
+                {
+                    day = day,
+                    revealAtServerTime = NetworkManager.Singleton != null
+                        ? NetworkManager.Singleton.ServerTime.Time + 0.8 : 0d,
+                    choices = ordered
+                }));
         }
 
         private void EnsureHostCpuChoices(int day)
@@ -1221,7 +1244,8 @@ namespace KaitouOnline
             }
         }
 
-        private void ApplyReadyChoices(int snapshotDay, ActionCardChoice[] choices)
+        private void ApplyReadyChoices(
+            int snapshotDay, double revealAtServerTime, ActionCardChoice[] choices)
         {
             if (revealStarted) return;
             int currentDay = HandManager.Instance != null
@@ -1275,10 +1299,21 @@ namespace KaitouOnline
             // 相手カードの伏せ移動開始直後、ローカルと同じカメラ・開示シーケンスへ入る。
             revealStarted = true;
             WaitingMessage = "";
+            StartCoroutine(BeginSynchronizedReveal(snapshotDay, revealAtServerTime));
+        }
+
+        private System.Collections.IEnumerator BeginSynchronizedReveal(
+            int day, double revealAtServerTime)
+        {
+            NetworkManager manager = NetworkManager.Singleton;
+            if (manager != null && revealAtServerTime > 0d)
+                while (manager.IsListening && manager.ServerTime.Time < revealAtServerTime)
+                    yield return null;
             CameraController cameraController =
                 Camera.main != null ? Camera.main.GetComponent<CameraController>() : null;
             cameraController?.MoveCamera();
-            Debug.Log($"<color=#70E8FF>【オンライン一斉開示】{snapshotDay}日目</color>");
+            Debug.Log($"<color=#70E8FF>【オンライン時刻同期開示】{day}日目 " +
+                      $"serverTime={revealAtServerTime:F3}</color>");
         }
 
         private static ActionCardChoice Describe(CardInteraction card, int seat, int number) =>

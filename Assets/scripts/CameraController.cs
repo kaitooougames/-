@@ -486,7 +486,7 @@ public class CameraController : MonoBehaviour
             if (entry.Key == 0) continue;
             if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
             {
-                if (KaitouOnline.KaitouOnlineGameBridge.IsHostCpuLocalSeat(entry.Key))
+                if (KaitouOnline.KaitouOnlineGameBridge.IsHostCpuTreasureSeat(entry.Key))
                 {
                     treasureController.ShuffleAppraiserDisplay(entry.Key, entry.Value);
                     KaitouOnline.KaitouOnlineGameBridge.SubmitAppraiserOrder(
@@ -557,7 +557,7 @@ public class CameraController : MonoBehaviour
             foreach (int localPlayerId in rearrangeTypesByPlayer.Keys)
             {
                 int networkSeat =
-                    KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(localPlayerId);
+                    KaitouOnline.KaitouOnlineGameBridge.ToNetworkTreasureSeat(localPlayerId);
                 if (KaitouOnline.KaitouOnlineGameBridge.TryGetAppraiserOrder(
                         appraiserDay, networkSeat, out int[] order))
                     treasureController.ApplyOnlineAppraiserOrder(
@@ -576,7 +576,7 @@ public class CameraController : MonoBehaviour
         foreach (int localPlayerId in rearrangeTypesByPlayer.Keys)
         {
             int networkSeat =
-                KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(localPlayerId);
+                KaitouOnline.KaitouOnlineGameBridge.ToNetworkTreasureSeat(localPlayerId);
             if (!KaitouOnline.KaitouOnlineGameBridge.TryGetAppraiserOrder(
                     day, networkSeat, out _))
                 return false;

@@ -1582,7 +1582,7 @@ public class TreasureController : MonoBehaviour
         if (!KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession ||
             KaitouOnline.KaitouOnlineSession.Instance == null)
             return networkSeat;
-        return KaitouOnline.KaitouOnlineGameBridge.ToLocalSeat(networkSeat);
+        return KaitouOnline.KaitouOnlineGameBridge.ToLocalTreasureSeat(networkSeat);
     }
 
     private int NetworkSeatForLocalPlayerIndex(int localPlayerIndex)
@@ -1590,7 +1590,7 @@ public class TreasureController : MonoBehaviour
         if (!KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession ||
             KaitouOnline.KaitouOnlineSession.Instance == null)
             return localPlayerIndex;
-        return KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(localPlayerIndex);
+        return KaitouOnline.KaitouOnlineGameBridge.ToNetworkTreasureSeat(localPlayerIndex);
     }
 
     private string OnlinePlayerLabel(Player player)
