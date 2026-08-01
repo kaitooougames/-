@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -5,6 +6,15 @@ namespace KaitouOnline
 {
     public sealed class KaitouMainMenu : MonoBehaviour
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport("__Internal")]
+        private static extern void KaitouCopyText(string text);
+
+        [DllImport("__Internal")]
+        private static extern void KaitouPasteText(
+            string gameObjectName, string callbackMethod);
+#endif
+
         [SerializeField] private string localSceneName = "IntegratedGameScene";
         private KaitouOnlineSession session;
         private string joinCode = "";
@@ -106,12 +116,17 @@ namespace KaitouOnline
                 session.CreateRoom(requestedPlayers);
             }
 
-            joinCode = GUI.TextField(new Rect(x, Screen.height * 0.59f, width, 55),
+            float clipboardButtonWidth = Mathf.Min(145f, width * 0.28f);
+            float codeFieldWidth = width - clipboardButtonWidth - 8f;
+            joinCode = GUI.TextField(new Rect(x, Screen.height * 0.59f, codeFieldWidth, 55),
                 joinCode, 12, new GUIStyle(GUI.skin.textField)
                 {
                     fontSize = Mathf.RoundToInt(Screen.height * 0.026f),
                     alignment = TextAnchor.MiddleCenter
                 });
+            if (MenuButton(new Rect(x + codeFieldWidth + 8f, Screen.height * 0.59f,
+                    clipboardButtonWidth, 55), "貼り付け", button))
+                PasteJoinCode();
             if (MenuButton(new Rect(x, Screen.height * 0.67f, width, 64), "参加コードで入る", button))
             {
                 EnsureSession();
@@ -120,8 +135,13 @@ namespace KaitouOnline
 
             if (session != null && !string.IsNullOrEmpty(session.JoinCode))
             {
-                GUI.Label(new Rect(x, Screen.height * 0.76f, width, 48),
+                GUI.Label(new Rect(x, Screen.height * 0.76f,
+                        width - clipboardButtonWidth - 8f, 48),
                     $"参加コード：{session.JoinCode}　接続：{session.ConnectedPlayers}/{session.RoomPlayerCount}", label);
+                if (MenuButton(new Rect(x + width - clipboardButtonWidth,
+                        Screen.height * 0.76f, clipboardButtonWidth, 48),
+                        "コードをコピー", button))
+                    CopyJoinCode(session.JoinCode);
                 GUI.enabled = session.IsHost &&
                               session.ConnectedPlayers >= session.RoomPlayerCount;
                 if (MenuButton(new Rect(x, Screen.height * 0.83f, width, 64), "対戦開始", button))
@@ -146,6 +166,36 @@ namespace KaitouOnline
 
         private void OnStatus(string value) => status = value;
         private void OnJoinCode(string value) => joinCode = value;
+
+        private void CopyJoinCode(string value)
+        {
+            string normalized = (value ?? "").Trim().ToUpperInvariant();
+            if (string.IsNullOrEmpty(normalized)) return;
+            GUIUtility.systemCopyBuffer = normalized;
+#if UNITY_WEBGL && !UNITY_EDITOR
+            KaitouCopyText(normalized);
+#endif
+            status = $"参加コード {normalized} をコピーしました。";
+        }
+
+        private void PasteJoinCode()
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            status = "クリップボードから参加コードを読み込んでいます…";
+            KaitouPasteText(gameObject.name, nameof(ReceivePastedJoinCode));
+#else
+            ReceivePastedJoinCode(GUIUtility.systemCopyBuffer);
+#endif
+        }
+
+        public void ReceivePastedJoinCode(string value)
+        {
+            joinCode = (value ?? "").Trim().ToUpperInvariant();
+            if (joinCode.Length > 12) joinCode = joinCode.Substring(0, 12);
+            status = string.IsNullOrEmpty(joinCode)
+                ? "クリップボードに参加コードがありません。"
+                : $"参加コード {joinCode} を貼り付けました。";
+        }
 
         private bool MenuButton(Rect rect, string text, GUIStyle style)
         {
