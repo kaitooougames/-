@@ -491,6 +491,33 @@ namespace KaitouOnline
                    networkSeat < Instance.session.RoomPlayerCount;
         }
 
+        public static bool ValidateSeatMappings()
+        {
+            if (!IsOnlineSession || Instance == null) return true;
+            var actionSeats = new HashSet<int>();
+            var treasureSeats = new HashSet<int>();
+            for (int networkSeat = 0;
+                 networkSeat < Instance.session.RoomPlayerCount; networkSeat++)
+            {
+                int actionSeat = Instance.LocalIndexForNetworkSeat(networkSeat);
+                int treasureSeat = Instance.NetworkSeatOrder(networkSeat);
+                if (actionSeat < 0 || treasureSeat < 0 ||
+                    !actionSeats.Add(actionSeat) || !treasureSeats.Add(treasureSeat) ||
+                    Instance.NetworkSeatForLocalIndex(actionSeat) != networkSeat ||
+                    Instance.NetworkSeatAtOrder(treasureSeat) != networkSeat)
+                {
+                    Debug.LogError($"【オンライン席変換エラー】network={networkSeat} " +
+                                   $"action={actionSeat} treasure={treasureSeat}");
+                    return false;
+                }
+            }
+            Debug.Log($"<color=#70E8FF>【オンライン席検査OK】" +
+                      $"local=P{Instance.session.LocalSeat + 1} players={Instance.session.RoomPlayerCount} " +
+                      $"action=[{string.Join(",", actionSeats)}] " +
+                      $"treasure=[{string.Join(",", treasureSeats)}]</color>");
+            return true;
+        }
+
         public static void SubmitDetectiveChoice(int day,
             int localDetectiveSeat, int localTargetSeat)
         {

@@ -26,6 +26,12 @@ namespace KaitouOnline
             // 宝配布にも同じ席変換を使うため、人数反映より先にBridgeを用意する。
             if (Object.FindFirstObjectByType<KaitouOnlineGameBridge>() == null)
                 new GameObject("KaitouOnlineGameBridge").AddComponent<KaitouOnlineGameBridge>();
+            if (!KaitouOnlineGameBridge.ValidateSeatMappings())
+            {
+                KaitouOnlineGameBridge.MarkConnectionLost(
+                    "オンラインのPlayer番号対応に失敗したため、ゲームを停止しました。");
+                return;
+            }
 
             HandManager.SetPlayerCountGlobally(session.RoomPlayerCount);
             TreasureGame.TreasureController treasure =
