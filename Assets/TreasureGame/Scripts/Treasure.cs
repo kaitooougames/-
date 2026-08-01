@@ -25,6 +25,7 @@ public class Treasure : MonoBehaviour
     private Material backMaterial;
     private Color frontBaseColor = Color.white;
     private Color backBaseColor = Color.white;
+    private MaterialPropertyBlock brightnessBlock;
     private bool faceUp;
     private bool interactable;
     private bool dimWhenDisabled = true;
@@ -292,6 +293,25 @@ public class Treasure : MonoBehaviour
             : Color.black;
         WriteEmission(frontMaterial, emission);
         WriteEmission(backMaterial, emission);
+
+        // WebGL/Playerビルドでは、実行時マテリアルの色変更が表面へ反映されない
+        // 場合がある。Rendererの各マテリアルスロットへ個別に色を渡して確実に反映する。
+        ApplyRendererBrightness(0, frontBaseColor, brightness, emission);
+        ApplyRendererBrightness(1, backBaseColor, brightness, emission);
+    }
+
+    private void ApplyRendererBrightness(int materialIndex, Color source,
+        float brightness, Color emission)
+    {
+        if (cardRenderer == null || materialIndex >= cardRenderer.sharedMaterials.Length) return;
+        if (brightnessBlock == null) brightnessBlock = new MaterialPropertyBlock();
+        brightnessBlock.Clear();
+        Color result = new Color(source.r * brightness, source.g * brightness,
+            source.b * brightness, source.a);
+        brightnessBlock.SetColor("_BaseColor", result);
+        brightnessBlock.SetColor("_Color", result);
+        brightnessBlock.SetColor("_EmissionColor", emission);
+        cardRenderer.SetPropertyBlock(brightnessBlock, materialIndex);
     }
 
     public void AnimateTo(Vector3 targetPosition, Quaternion targetRotation, float duration)
