@@ -32,6 +32,7 @@ public class TreasureController : MonoBehaviour
     private readonly Dictionary<Player, List<Treasure>> stolenByRobber = new Dictionary<Player, List<Treasure>>();
     // 今ターン盗んだカードと盗んだ本人。展示完了まで本人のほかの手札を暗くする。
     private readonly HashSet<Player> stolenFocusPlayers = new HashSet<Player>();
+    private bool debugDimPlayerOneHand;
     private readonly Dictionary<Player, Dictionary<Player, int>> stolenCountsByVictim =
         new Dictionary<Player, Dictionary<Player, int>>();
     private readonly Dictionary<Player, List<Treasure>> robberDisplaySelections = new Dictionary<Player, List<Treasure>>();
@@ -65,6 +66,14 @@ public class TreasureController : MonoBehaviour
     private string gameResultText = string.Empty;
     public TreasurePhase Phase { get; private set; } = TreasurePhase.Waiting;
     public int PlayerCount => playerCount;
+    public bool DebugDimPlayerOneHand => debugDimPlayerOneHand;
+
+    public void ToggleDebugPlayerOneHandDim()
+    {
+        debugDimPlayerOneHand = !debugDimPlayerOneHand;
+        RefreshInteraction();
+        Debug.Log($"【手札暗転テスト】{(debugDimPlayerOneHand ? "ON" : "OFF")}");
+    }
     public Player ActiveRobber => robberyIndex < robberies.Count ? robberies[robberyIndex].Player : null;
     public bool PlayerOneHandVisible => players.Count > 0 && players[0].HandVisible;
     public bool CanScrollPlayerOneHandBackward => players.Count > 0 && players[0].CanScrollHandBackward;
@@ -1436,7 +1445,10 @@ public class TreasureController : MonoBehaviour
                 treasure.Location == TreasureLocation.Hand &&
                 !treasuresInTransit.Contains(treasure) &&
                 !ownerStolenCards.Contains(treasure);
-            treasure.SetForcedDim(forceAnalysisDim || forceNonStolenHandDim ||
+            bool forceDebugHandDim = debugDimPlayerOneHand && playerOne != null &&
+                treasure.Owner == playerOne &&
+                treasure.Location == TreasureLocation.Hand;
+            treasure.SetForcedDim(forceAnalysisDim || forceNonStolenHandDim || forceDebugHandDim ||
                                   selectedForDisplay || selectedForRobberDisplay);
             bool visibleToPlayerOne = FreeInteractionMode || treasuresInTransit.Contains(treasure) ||
                 treasure.Location == TreasureLocation.Display ||

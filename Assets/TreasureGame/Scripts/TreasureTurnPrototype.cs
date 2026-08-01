@@ -174,6 +174,17 @@ public class TreasureTurnPrototype : MonoBehaviour
         if (treasureController != null)
         {
             GUI.enabled = true;
+            GUIStyle dimTestStyle = new GUIStyle(style)
+            {
+                fontSize = Mathf.RoundToInt(13f * uiScale)
+            };
+            Rect dimTestRect = new Rect(Screen.width - 255f * uiScale,
+                120f * uiScale, 235f * uiScale, 42f * uiScale);
+            string dimTestLabel = treasureController.DebugDimPlayerOneHand
+                ? "手札暗転テスト：ON" : "手札暗転テスト：OFF";
+            if (GUI.Button(dimTestRect, dimTestLabel, dimTestStyle))
+                treasureController.ToggleDebugPlayerOneHandDim();
+
             GUIStyle treasureStyle = new GUIStyle(GUI.skin.button)
             {
                 fontSize = Mathf.RoundToInt(17f * uiScale),
