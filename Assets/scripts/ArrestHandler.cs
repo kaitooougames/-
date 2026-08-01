@@ -148,6 +148,15 @@ CardsCollected:
             Debug.Log($"怪盗カード: {thief.name}, 選択数: {thief.SelectedNumber}");
         }
 
+        // 競合などの逮捕演出がカード状態へ影響する前に、檻の対象順を確定する。
+        // 競合した怪盗も候補から外さない。同数時は全端末共通のPlayer番号で固定する。
+        List<CardInteraction> orderedCageTargets = phantomThieves
+            .OrderBy(t => t.SelectedNumber)
+            .ThenBy(t => t.specialEffect == SpecialActionEffect.ElectricBaton ? 0 : 1)
+            .ThenBy(t => t.specialEffect == SpecialActionEffect.SoloStage ? 1 : 0)
+            .ThenBy(CageTargetPlayerOrder)
+            .ToList();
+
         // **怪盗の競合処理**
         HandleThiefConflict(); // 🔹 檻がいなくても競合チェックを実行
         HandleSoloStageEffect();
@@ -166,7 +175,7 @@ CardsCollected:
         }
 
         // **1対1で逮捕処理**
-        ArrestThieves();
+        ArrestThieves(orderedCageTargets);
 
     }
     private void HandleThiefConflict()
@@ -211,34 +220,29 @@ CardsCollected:
     }
 
 
-    private void ArrestThieves()
+    private void ArrestThieves(List<CardInteraction> orderedCageTargets)
     {
         // 警備員ですでに逮捕済みでも、檻の対応対象なら檻は成功・報酬あり。
         // 逮捕ペナルティそのものはArrest内で二重発動を防ぐ。
-        phantomThieves = phantomThieves
-            .OrderBy(t => t.SelectedNumber)
-            // 同じ宣言数なら、通電ステッキを檻が優先して逮捕する。
-            .ThenBy(t => t.specialEffect == SpecialActionEffect.ElectricBaton ? 0 : 1)
-            // 同じ宣言数3で競合した場合だけ、独壇場ではない怪盗を先に檻へ割り当てる。
-            .ThenBy(t => t.specialEffect == SpecialActionEffect.SoloStage ? 1 : 0)
-            .ToList();
+        if (orderedCageTargets == null) orderedCageTargets = new List<CardInteraction>();
 
         if (cages.All(c => c.specialEffect == SpecialActionEffect.Watchdog))
         {
-            ArrestThievesWithWatchdogs();
+            ArrestThievesWithWatchdogs(orderedCageTargets);
             return;
         }
 
         bool prisonPlayed = cages.Any(c => c.specialEffect == SpecialActionEffect.Prison);
-        for (int i = 0; i < cages.Count && i < phantomThieves.Count; i++)
+        for (int i = 0; i < cages.Count && i < orderedCageTargets.Count; i++)
         {
-            Debug.Log($"檻が {phantomThieves[i].name} を逮捕！");
-            Arrest(phantomThieves[i]);
-            if (phantomThieves[i].specialEffect == SpecialActionEffect.ElectricBaton)
+            CardInteraction target = orderedCageTargets[i];
+            Debug.Log($"檻が {target.name}（宣言数{target.SelectedNumber}）を逮捕！");
+            Arrest(target);
+            if (target.specialEffect == SpecialActionEffect.ElectricBaton)
                 ApplyElectricBatonCageEffect();
             if (prisonPlayed)
             {
-                int thiefSeat = FindPlayerIdByCard(phantomThieves[i]);
+                int thiefSeat = FindPlayerIdByCard(target);
                 SpecialActionCardSystem.Imprison(
                     thiefSeat, HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1);
             }
@@ -257,9 +261,9 @@ CardsCollected:
         Debug.Log("<color=#72E6FF>【通電ステッキ発動】番犬による無効化を含め、檻を出した全プレイヤーを翌日除外。</color>");
     }
 
-    private void ArrestThievesWithWatchdogs()
+    private void ArrestThievesWithWatchdogs(List<CardInteraction> orderedCageTargets)
     {
-        int thiefCount = phantomThieves.Count;
+        int thiefCount = orderedCageTargets.Count;
         int watchdogCount = cages.Count;
         int effectiveCages = Mathf.Max(watchdogCount, Mathf.Min(2, thiefCount));
         if (effectiveCages > thiefCount)
@@ -272,7 +276,7 @@ CardsCollected:
         for (int i = 0; i < effectiveCages && i < thiefCount; i++)
         {
             CardInteraction watchdog = cages[i % watchdogCount];
-            CardInteraction thief = phantomThieves[i];
+            CardInteraction thief = orderedCageTargets[i];
             Debug.Log($"【番犬】{watchdog.name}が{thief.name}を逮捕！");
             Arrest(thief);
             if (thief.specialEffect == SpecialActionEffect.ElectricBaton)
@@ -281,6 +285,14 @@ CardsCollected:
             if (ownerId >= 0)
                 successfulCagePlayerIds.Add(ownerId);
         }
+    }
+
+    private int CageTargetPlayerOrder(CardInteraction card)
+    {
+        int localSeat = FindPlayerIdByCard(card);
+        return KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession
+            ? KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(localSeat)
+            : localSeat;
     }
 
     private void HandleSoloStageEffect()
