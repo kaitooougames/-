@@ -136,6 +136,7 @@ public static class KaitouWebOnlineSetup
 
         if (report.summary.result == BuildResult.Succeeded)
         {
+            MakeWebBuildResponsive();
             Debug.Log($"【Web版完成】{WebGLBuildDirectory}");
             EditorUtility.RevealInFinder(WebGLBuildDirectory);
         }
@@ -159,6 +160,45 @@ public static class KaitouWebOnlineSetup
         PlayerSettings.SetPreloadedAssets(assets.ToArray());
         AssetDatabase.SaveAssets();
         Debug.Log("【Web版】日本語GUIフォントをビルドへ追加しました。");
+    }
+
+    private static void MakeWebBuildResponsive()
+    {
+        string indexPath = Path.Combine(WebGLBuildDirectory, "index.html");
+        string cssPath = Path.Combine(WebGLBuildDirectory, "TemplateData/style.css");
+        if (!File.Exists(indexPath) || !File.Exists(cssPath)) return;
+
+        string html = File.ReadAllText(indexPath);
+        html = html.Replace(
+            "user-scalable=no, shrink-to-fit=yes",
+            "user-scalable=no, shrink-to-fit=yes, viewport-fit=cover");
+        File.WriteAllText(indexPath, html);
+
+        const string responsiveCss = @"
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #231F20;
+  overscroll-behavior: none;
+}
+#unity-container.unity-mobile {
+  position: fixed;
+  left: env(safe-area-inset-left);
+  top: env(safe-area-inset-top);
+  width: calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right));
+  height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+.unity-mobile #unity-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+";
+        File.AppendAllText(cssPath, responsiveCss);
+        Debug.Log("【Web版】スマホのSafe Areaと画面高へ対応しました。");
     }
 }
 #endif

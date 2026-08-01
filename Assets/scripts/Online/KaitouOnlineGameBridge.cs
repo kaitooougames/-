@@ -12,7 +12,9 @@ namespace KaitouOnline
         public static bool IsActive => Instance != null && Instance.session != null &&
                                        Instance.session.IsOnline;
         public static bool IsOnlineSession =>
-            KaitouOnlineSession.Instance != null && KaitouOnlineSession.Instance.IsOnline;
+            KaitouOnlineSession.Instance != null &&
+            (KaitouOnlineSession.Instance.IsOnline ||
+             KaitouOnlineSession.Instance.HasStartedOnlineGame);
 
         private readonly Dictionary<int, ActionCardChoice> hostChoices =
             new Dictionary<int, ActionCardChoice>();
@@ -63,6 +65,15 @@ namespace KaitouOnline
         {
             if (session != null) session.MessageReceived -= OnMessage;
             if (Instance == this) Instance = null;
+        }
+
+        public static void MarkConnectionLost(string message)
+        {
+            WaitingMessage = string.IsNullOrEmpty(message)
+                ? "オンライン接続が切れました。ゲームを停止しています。"
+                : message;
+            PriorityMessage = WaitingMessage;
+            Debug.LogError("【オンライン進行停止】" + WaitingMessage);
         }
 
         public static bool SubmitLocalAction(CardInteraction card, int declaredNumber)

@@ -25,6 +25,7 @@ namespace KaitouOnline
         private int sequence;
         private bool connecting;
         private int gameSeed;
+        private bool onlineGameStarted;
 
         public string JoinCode => joinCode;
         public int RoomPlayerCount => roomPlayerCount;
@@ -39,6 +40,7 @@ namespace KaitouOnline
         public bool IsOnline => NetworkManager.Singleton != null &&
                                 NetworkManager.Singleton.IsListening;
         public int GameSeed => gameSeed;
+        public bool HasStartedOnlineGame => onlineGameStarted;
 
         private void Awake()
         {
@@ -130,12 +132,14 @@ namespace KaitouOnline
                 StartGameState start = Protocol.Parse<StartGameState>(payload);
                 roomPlayerCount = Mathf.Clamp(start.playerCount, 2, 4);
                 gameSeed = start.randomSeed;
+                onlineGameStarted = true;
             }
             else if (type == MessageType.RestartGame)
             {
                 StartGameState restart = Protocol.Parse<StartGameState>(payload);
                 roomPlayerCount = Mathf.Clamp(restart.playerCount, 2, 4);
                 gameSeed = restart.randomSeed;
+                onlineGameStarted = true;
             }
             Envelope envelope = new Envelope
             {
@@ -256,10 +260,20 @@ namespace KaitouOnline
                              $"local={NetworkManager.Singleton?.LocalClientId}");
             if (NetworkManager.Singleton != null &&
                 clientId == NetworkManager.Singleton.LocalClientId)
+            {
                 Report("オンライン接続が切れました。");
+                KaitouOnlineGameBridge.MarkConnectionLost(
+                    string.IsNullOrEmpty(NetworkManager.Singleton.DisconnectReason)
+                        ? "オンライン接続が切れました。ゲームを停止しています。"
+                        : "オンライン接続が切れました：" +
+                          NetworkManager.Singleton.DisconnectReason);
+            }
             else if (IsHost)
             {
                 Report($"参加者が切断しました（現在 {ConnectedPlayers}/{roomPlayerCount}人）");
+                if (onlineGameStarted)
+                    KaitouOnlineGameBridge.MarkConnectionLost(
+                        "相手とのオンライン接続が切れました。ゲームを停止しています。");
                 BroadcastLobby();
             }
         }
@@ -315,12 +329,14 @@ namespace KaitouOnline
                 StartGameState start = Protocol.Parse<StartGameState>(envelope.payload);
                 roomPlayerCount = Mathf.Clamp(start.playerCount, 2, 4);
                 gameSeed = start.randomSeed;
+                onlineGameStarted = true;
             }
             else if (envelope.type == MessageType.RestartGame)
             {
                 StartGameState restart = Protocol.Parse<StartGameState>(envelope.payload);
                 roomPlayerCount = Mathf.Clamp(restart.playerCount, 2, 4);
                 gameSeed = restart.randomSeed;
+                onlineGameStarted = true;
             }
             if (IsHost && senderId != NetworkManager.Singleton.LocalClientId)
             {
