@@ -105,6 +105,7 @@ public class CardInteraction : MonoBehaviour
     private bool selectedHoverLocked;
     private bool handPoseInitialized;
     private bool earlyRevealed;
+    private int earlyRevealedDay = -1;
     private bool revealedOnTable;
     private Vector3 pointerDownPosition;
     private Vector3 lastPointerPosition;
@@ -450,8 +451,13 @@ public class CardInteraction : MonoBehaviour
 
         // 選択不可の暗転は手札にある間だけ使用する。
         // 公開後の裏面まで暗くならないよう、反転開始時に見た目だけ通常へ戻す。
-        if (!earlyRevealed)
+        int currentDay = HandManager.Instance != null
+            ? HandManager.Instance.CurrentDay : -1;
+        bool revealedEarlierToday = earlyRevealed && earlyRevealedDay == currentDay;
+        if (!revealedEarlierToday)
         {
+            earlyRevealed = false;
+            earlyRevealedDay = -1;
             SetClickBrightness(1f);
             targetRotation = Quaternion.Euler(transform.rotation.eulerAngles.x + 180,
                 transform.rotation.eulerAngles.y + 180, transform.rotation.eulerAngles.z);
@@ -485,6 +491,8 @@ public class CardInteraction : MonoBehaviour
         selectedHoverLocked = false;
         transform.localScale = originalScale;
         earlyRevealed = true;
+        earlyRevealedDay = HandManager.Instance != null
+            ? HandManager.Instance.CurrentDay : -1;
         targetRotation = Quaternion.Euler(transform.rotation.eulerAngles.x + 180,
             transform.rotation.eulerAngles.y + 180, transform.rotation.eulerAngles.z);
         isFlipping = true;
@@ -571,6 +579,7 @@ public class CardInteraction : MonoBehaviour
         EffectManager.Instance.ClearStealNumber();
         selectedStealNumber = 0; // 🔹 宣言された数字をリセット
         earlyRevealed = false;
+        earlyRevealedDay = -1;
         revealedOnTable = false;
     }
 

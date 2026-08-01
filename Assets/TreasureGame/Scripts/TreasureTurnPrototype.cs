@@ -27,6 +27,7 @@ public class TreasureTurnPrototype : MonoBehaviour
     private float lastDragX;
     private float handSlideVelocity;
     private bool cardGripActive;
+    private bool showOnlineExitConfirmation;
 
     private void Awake() => Instance = this;
 
@@ -129,13 +130,45 @@ public class TreasureTurnPrototype : MonoBehaviour
             fontStyle = FontStyle.Bold
         };
 
-        if (!KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+        bool onlineSession = KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession;
+        if (!onlineSession)
         {
             GUI.enabled = true;
             Rect exitRect = new Rect(buttonMargin * uiScale, 70f * uiScale,
                 190f * uiScale, 46f * uiScale);
             if (GUI.Button(exitRect, "終了してホームへ", style))
                 SceneManager.LoadScene("MainMenu");
+        }
+        else
+        {
+            GUI.enabled = true;
+            Rect exitRect = new Rect(buttonMargin * uiScale, 70f * uiScale,
+                190f * uiScale, 46f * uiScale);
+            if (GUI.Button(exitRect, "ホームへ戻る", style))
+                showOnlineExitConfirmation = true;
+        }
+
+        if (showOnlineExitConfirmation)
+        {
+            GUI.enabled = true;
+            float confirmWidth = 360f * uiScale;
+            float confirmHeight = 150f * uiScale;
+            Rect confirmRect = new Rect(
+                (Screen.width - confirmWidth) * 0.5f,
+                (Screen.height - confirmHeight) * 0.5f,
+                confirmWidth, confirmHeight);
+            GUI.Box(confirmRect, "接続を切ってホームへ戻りますか？");
+            float choiceY = confirmRect.y + 78f * uiScale;
+            if (GUI.Button(new Rect(confirmRect.x + 28f * uiScale, choiceY,
+                    135f * uiScale, 48f * uiScale), "戻る", style))
+            {
+                KaitouOnline.KaitouOnlineSession.Instance?.Disconnect();
+                showOnlineExitConfirmation = false;
+                SceneManager.LoadScene("MainMenu");
+            }
+            if (GUI.Button(new Rect(confirmRect.x + 197f * uiScale, choiceY,
+                    135f * uiScale, 48f * uiScale), "キャンセル", style))
+                showOnlineExitConfirmation = false;
         }
 
         if (treasureController != null)
@@ -173,19 +206,22 @@ public class TreasureTurnPrototype : MonoBehaviour
 
             if (treasureController.PlayerOneHandVisible) HandleHandScrollInput();
 
-            GUI.enabled = !turnRunning && (treasureController.Phase == TreasurePhase.Waiting ||
-                treasureController.Phase == TreasurePhase.GameOver);
-            float playerButtonY = 106f * uiScale;
-            for (int count = 2; count <= 4; count++)
+            if (!onlineSession)
             {
-                GUIStyle countStyle = new GUIStyle(style);
-                if (treasureController.PlayerCount == count) countStyle.fontStyle = FontStyle.Bold;
-                if (GUI.Button(new Rect(Screen.width - 158f * uiScale + (count - 2) * 48f * uiScale,
-                    playerButtonY, 44f * uiScale, 34f * uiScale),
-                    $"{count}人", countStyle))
+                GUI.enabled = !turnRunning && (treasureController.Phase == TreasurePhase.Waiting ||
+                    treasureController.Phase == TreasurePhase.GameOver);
+                float playerButtonY = 106f * uiScale;
+                for (int count = 2; count <= 4; count++)
                 {
-                    treasureController.RestartWithPlayerCount(count);
-                    global::HandManager.SetPlayerCountGlobally(count);
+                    GUIStyle countStyle = new GUIStyle(style);
+                    if (treasureController.PlayerCount == count) countStyle.fontStyle = FontStyle.Bold;
+                    if (GUI.Button(new Rect(Screen.width - 158f * uiScale + (count - 2) * 48f * uiScale,
+                        playerButtonY, 44f * uiScale, 34f * uiScale),
+                        $"{count}人", countStyle))
+                    {
+                        treasureController.RestartWithPlayerCount(count);
+                        global::HandManager.SetPlayerCountGlobally(count);
+                    }
                 }
             }
         }

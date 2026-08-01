@@ -31,8 +31,7 @@ public class TreasureController : MonoBehaviour
     private readonly List<Treasure> stolenThisRobbery = new List<Treasure>();
     private readonly Dictionary<Player, List<Treasure>> stolenByRobber = new Dictionary<Player, List<Treasure>>();
     // 今ターン盗んだカードと盗んだ本人。展示完了まで本人のほかの手札を暗くする。
-    private readonly HashSet<Treasure> stolenFocusCards = new HashSet<Treasure>();
-    private Player stolenFocusOwner;
+    private readonly HashSet<Player> stolenFocusPlayers = new HashSet<Player>();
     private readonly Dictionary<Player, Dictionary<Player, int>> stolenCountsByVictim =
         new Dictionary<Player, Dictionary<Player, int>>();
     private readonly Dictionary<Player, List<Treasure>> robberDisplaySelections = new Dictionary<Player, List<Treasure>>();
@@ -430,6 +429,7 @@ public class TreasureController : MonoBehaviour
         optionalRelicDoubleDisplayPlayers.Clear();
         displayPlayers.Clear(); robberies.Clear(); stolenThisRobbery.Clear();
         stolenByRobber.Clear(); stolenCountsByVictim.Clear(); robberDisplaySelections.Clear();
+        stolenFocusPlayers.Clear();
         blockedFromWinningThisTurn.Clear();
         queuedArrestRewardPlayerIds.Clear();
         endTurnAfterCurrentDisplay = false;
@@ -561,6 +561,7 @@ public class TreasureController : MonoBehaviour
         });
         robberyIndex = 0;
         stolenByRobber.Clear(); robberDisplaySelections.Clear();
+        stolenFocusPlayers.Clear();
         Debug.Log($"<color=#FF9F70>【怪盗開始】実行順：{RobberyList()}</color>");
         StartNextRobbery();
     }
@@ -916,8 +917,7 @@ public class TreasureController : MonoBehaviour
         card.MoveTo(p, r);
         // 移動中は暗転させない。手札へ到着した時点から、
         // 盗品以外の手札だけを暗くする。
-        stolenFocusOwner = ActiveRobber;
-        stolenFocusCards.Add(card);
+        stolenFocusPlayers.Add(ActiveRobber);
         RefreshInteraction();
         ActiveRobber.AnimateHandLayout(moveDuration * 0.35f);
         yield return new WaitForSeconds(moveDuration * 0.35f);
@@ -992,8 +992,7 @@ public class TreasureController : MonoBehaviour
             }
         }
         yield return new WaitForSeconds(moveDuration);
-        stolenFocusCards.Clear();
-        stolenFocusOwner = null;
+        stolenFocusPlayers.Clear();
         RefreshInteraction();
         if (robberDisplaySelections.ContainsKey(players[0]) && players[0].HandVisible)
             players[0].SetHandVisible(false, handSlideDuration);
@@ -1397,8 +1396,7 @@ public class TreasureController : MonoBehaviour
         bool playerOneRobbing = Phase == TreasurePhase.Robbing && ActiveRobber == playerOne;
         bool analysisActive = Phase == TreasurePhase.Inspecting &&
                               analysisRobber != null;
-        bool hasPendingStolenDisplay = stolenFocusOwner != null &&
-            stolenFocusCards.Count > 0;
+        bool hasPendingStolenDisplay = stolenFocusPlayers.Count > 0;
 
         foreach (Treasure treasure in allTreasures)
         {
@@ -1431,11 +1429,13 @@ public class TreasureController : MonoBehaviour
                     forceAnalysisDim = !selectedForAnalysis;
                 }
             }
-            bool forceNonStolenHandDim = hasPendingStolenDisplay &&
-                treasure.Owner == stolenFocusOwner &&
+            bool forceNonStolenHandDim = treasure.Owner != null &&
+                stolenFocusPlayers.Contains(treasure.Owner) &&
+                stolenByRobber.TryGetValue(treasure.Owner,
+                    out List<Treasure> ownerStolenCards) &&
                 treasure.Location == TreasureLocation.Hand &&
                 !treasuresInTransit.Contains(treasure) &&
-                !stolenFocusCards.Contains(treasure);
+                !ownerStolenCards.Contains(treasure);
             treasure.SetForcedDim(forceAnalysisDim || forceNonStolenHandDim ||
                                   selectedForDisplay || selectedForRobberDisplay);
             bool visibleToPlayerOne = FreeInteractionMode || treasuresInTransit.Contains(treasure) ||
@@ -1455,8 +1455,14 @@ public class TreasureController : MonoBehaviour
             }
             else if (hasPendingStolenDisplay)
             {
-                bool isStolenCard = stolenFocusCards.Contains(treasure);
-                shouldDim = treasure.Owner == stolenFocusOwner && treasure.Location == TreasureLocation.Hand &&
+                bool isFocusedOwner = treasure.Owner != null &&
+                    stolenFocusPlayers.Contains(treasure.Owner);
+                bool isStolenCard = isFocusedOwner &&
+                    stolenByRobber.TryGetValue(treasure.Owner,
+                        out List<Treasure> focusedOwnerStolenCards) &&
+                    focusedOwnerStolenCards.Contains(treasure);
+                shouldDim = isFocusedOwner &&
+                    treasure.Location == TreasureLocation.Hand &&
                     !treasuresInTransit.Contains(treasure) && !isStolenCard;
             }
             treasure.SetInteractionState(canClick, shouldDim);

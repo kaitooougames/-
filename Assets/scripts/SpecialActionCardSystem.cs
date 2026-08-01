@@ -184,6 +184,8 @@ public static class SpecialActionCardSystem
         for (int value = 1; value <= (int)SpecialActionEffect.AdvanceNotice; value++)
         {
             SpecialActionEffect effect = (SpecialActionEffect)value;
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession &&
+                effect == SpecialActionEffect.FrameUp) continue;
             // テストボタンでは、ゲーム全体の一枚制限より「P1が全種類を持つ」を優先する。
             // 二度押ししても同じ効果は増やさない。
             if (ownerCards.Exists(card =>
@@ -279,6 +281,8 @@ public static class SpecialActionCardSystem
     private static void GrantSpecificCardToSeat(int seat, SpecialActionEffect effect,
         HandManager handManager)
     {
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession &&
+            effect == SpecialActionEffect.FrameUp) return;
         List<CardInteraction> ownerCards = GetCards(seat);
         if (ownerCards == null || !TryGetTemplates(seat, ownerCards,
                 out CardInteraction exhibitTemplate, out CardInteraction thiefTemplate)) return;
