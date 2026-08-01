@@ -136,7 +136,12 @@ public class HandManager : MonoBehaviour
         player.gameObject.SetActive(active);
         if (player.player2Cards == null) return;
         foreach (CardInteraction card in player.player2Cards)
-            if (card != null) card.gameObject.SetActive(active);
+            if (card != null)
+            {
+                card.gameObject.SetActive(active);
+                if (active && KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+                    card.SetVisualVisible(false);
+            }
     }
 
     private static void SetOpponentActive(Player3 player, bool active)
@@ -145,7 +150,12 @@ public class HandManager : MonoBehaviour
         player.gameObject.SetActive(active);
         if (player.player3Cards == null) return;
         foreach (CardInteraction card in player.player3Cards)
-            if (card != null) card.gameObject.SetActive(active);
+            if (card != null)
+            {
+                card.gameObject.SetActive(active);
+                if (active && KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+                    card.SetVisualVisible(false);
+            }
     }
 
     private static void SetOpponentActive(Player4 player, bool active)
@@ -154,7 +164,12 @@ public class HandManager : MonoBehaviour
         player.gameObject.SetActive(active);
         if (player.player4Cards == null) return;
         foreach (CardInteraction card in player.player4Cards)
-            if (card != null) card.gameObject.SetActive(active);
+            if (card != null)
+            {
+                card.gameObject.SetActive(active);
+                if (active && KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+                    card.SetVisualVisible(false);
+            }
     }
 
     void ArrangeHand()
@@ -400,6 +415,7 @@ public class HandManager : MonoBehaviour
             : Quaternion.Euler(180f, 0f, 180f);
         for (int i = 0; i < visibleCards.Count; i++)
         {
+            visibleCards[i].SetVisualVisible(true);
             visibleCards[i].DisableClick(false);
             visibleCards[i].MoveToInspection(new Vector3(startX + spacing * i, 2.1f, -1.45f),
                 inspectionRotation, 8f);
@@ -419,7 +435,7 @@ public class HandManager : MonoBehaviour
         Vector3 storage = victimActionSeat == 1 ? new Vector3(0f, 2f, 2.5f) :
             victimActionSeat == 2 ? new Vector3(-5f, 2f, 0f) : new Vector3(5f, 2f, 0f);
         foreach (CardInteraction card in visibleCards)
-            card.MoveTo(storage, 7f);
+            card.MoveToHidden(storage, 7f);
         yield return new WaitForSeconds(0.5f);
         honeyTrapInspectionMessage = "";
         KaitouOnline.KaitouOnlineGameBridge.NotifyHoneyTrapInspection(

@@ -116,6 +116,28 @@ public class CardInteraction : MonoBehaviour
 
     private ArrestEffect activeArrestEffect; // 現在の逮捕エフェクト
 
+    public void SetVisualVisible(bool visible)
+    {
+        if (visualRenderers == null || visualRenderers.Length == 0)
+            visualRenderers = GetComponentsInChildren<Renderer>(true);
+        foreach (Renderer visualRenderer in visualRenderers)
+            if (visualRenderer != null) visualRenderer.enabled = visible;
+    }
+
+    public void MoveToHidden(Vector3 newPosition, float speed = 5f)
+    {
+        StopCoroutine(nameof(MoveThenHide));
+        StartCoroutine(MoveThenHide(newPosition, speed));
+    }
+
+    private IEnumerator MoveThenHide(Vector3 newPosition, float speed)
+    {
+        SetVisualVisible(true);
+        MoveTo(newPosition, speed);
+        while (isMoving) yield return null;
+        SetVisualVisible(false);
+    }
+
     public bool IsCageCard()
     {
         return isCage; // isCage フィールドが true の場合、「檻」カード

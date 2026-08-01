@@ -58,6 +58,7 @@ public class Player2 : MonoBehaviour
         // ランダムに選択
         int randomIndex = Random.Range(0, selectableCards.Count);
         selectedCard = selectableCards[randomIndex];
+        selectedCard.SetVisualVisible(true);
         SpecialActionCardSystem.NotifySelected(1, selectedCard);
 
         Vector3 player2Position = new Vector3(0, 0, 1);
@@ -85,6 +86,7 @@ public class Player2 : MonoBehaviour
             return;
         }
         selectedCard = match;
+        match.SetVisualVisible(true);
         SelectedNumber = thief ? declaredNumber : 0;
         match.SelectedNumber = SelectedNumber;
         SpecialActionCardSystem.NotifySelected(1, match);
@@ -318,7 +320,10 @@ public class Player2 : MonoBehaviour
         foreach (var card in player2Cards)
         {
             if (SpecialActionCardSystem.IsAdvanceNoticePendingCard(1, card)) continue;
-            card.MoveTo(new Vector3(0, 2, 2.5f), 2.5f);
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+                card.MoveToHidden(new Vector3(0, 2, 2.5f), 2.5f);
+            else
+                card.MoveTo(new Vector3(0, 2, 2.5f), 2.5f);
         }
         if (!keepAdvanceNotice && activeStealEffect != null)
         {
