@@ -30,7 +30,8 @@ namespace KaitouOnline
         ReturnToLobby,
         TurnCleanup,
         StateCheckpointResult,
-        DesyncDetected
+        DesyncDetected,
+        PlayerNameUpdate
     }
 
     [Serializable]
@@ -53,6 +54,7 @@ namespace KaitouOnline
         public int cpuPlayers;
         public bool participantsConfirmed;
         public bool gameStarted;
+        public string[] playerNames;
     }
 
     [Serializable]
@@ -182,11 +184,18 @@ namespace KaitouOnline
         public string message;
     }
 
+    [Serializable]
+    public struct OnlinePlayerName
+    {
+        public int seat;
+        public string value;
+    }
+
     public static class Protocol
     {
         // オンライン進行規約。古いMacビルドとの混在を防ぐため、
         // フェーズ同期方式を変更したら必ず更新する。
-        public const int Version = 12;
+        public const int Version = 13;
         public const string MessageName = "KaitouOnlineEvent";
 
         public static string Json<T>(T value) => JsonUtility.ToJson(value);

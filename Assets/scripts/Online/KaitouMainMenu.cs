@@ -23,6 +23,8 @@ namespace KaitouOnline
         private bool onlineMenu;
         private AudioSource uiAudio;
         private AudioClip clickClip;
+        private string playerName = "";
+        private bool playerNameSent;
 
         private void Start()
         {
@@ -111,6 +113,17 @@ namespace KaitouOnline
             }
 
             GUI.Label(new Rect(x, Screen.height * 0.24f, width, 58), status, label);
+            if (session == null || !session.IsOnline)
+            {
+                GUI.Label(new Rect(x, Screen.height * 0.30f, width, 34),
+                    "プレイヤー名", label);
+                playerName = GUI.TextField(new Rect(x, Screen.height * 0.34f, width, 48),
+                    playerName, 12, new GUIStyle(GUI.skin.textField)
+                    {
+                        fontSize = Mathf.RoundToInt(Screen.height * 0.024f),
+                        alignment = TextAnchor.MiddleCenter
+                    });
+            }
             if ((session == null || !session.IsOnline) &&
                 MenuButton(new Rect(x, Screen.height * 0.39f, width, 64), "部屋を作る", button))
             {
@@ -140,6 +153,11 @@ namespace KaitouOnline
 
             if (session != null && !string.IsNullOrEmpty(session.JoinCode))
             {
+                if (!playerNameSent)
+                {
+                    session.SetLocalPlayerName(playerName);
+                    playerNameSent = true;
+                }
                 GUI.Label(new Rect(x, Screen.height * 0.67f,
                         width - clipboardButtonWidth - 8f, 48),
                     $"参加コード：{session.JoinCode}　現在{session.ConnectedPlayers}人接続中", label);
@@ -150,6 +168,11 @@ namespace KaitouOnline
 
                 if (!session.ParticipantsConfirmed)
                 {
+                    string connectedNames = "";
+                    for (int seat = 0; seat < session.ConnectedPlayers; seat++)
+                        connectedNames += (seat == 0 ? "" : " / ") + session.GetPlayerName(seat);
+                    GUI.Label(new Rect(x, Screen.height * 0.71f, width, 32),
+                        connectedNames, label);
                     GUI.enabled = session.IsHost && session.ConnectedPlayers >= 2;
                     if (MenuButton(new Rect(x, Screen.height * 0.75f, width, 54),
                             "参加者を確定", button))
@@ -205,6 +228,7 @@ namespace KaitouOnline
             {
                 session?.Disconnect();
                 onlineMenu = false;
+                playerNameSent = false;
             }
         }
 

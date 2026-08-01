@@ -29,6 +29,7 @@ namespace KaitouOnline
         private bool connecting;
         private int gameSeed;
         private bool onlineGameStarted;
+        private readonly string[] playerNames = { "Player1", "Player2", "Player3", "Player4" };
 
         public string JoinCode => joinCode;
         public int RoomPlayerCount => roomPlayerCount;
@@ -47,6 +48,34 @@ namespace KaitouOnline
                                 NetworkManager.Singleton.IsListening;
         public int GameSeed => gameSeed;
         public bool HasStartedOnlineGame => onlineGameStarted;
+        public string GetPlayerName(int seat)
+        {
+            if (seat < 0 || seat >= playerNames.Length) return $"Player{seat + 1}";
+            return string.IsNullOrWhiteSpace(playerNames[seat])
+                ? $"Player{seat + 1}" : playerNames[seat];
+        }
+
+        public void SetLocalPlayerName(string value)
+        {
+            if (!IsOnline || LocalSeat < 0) return;
+            string normalized = NormalizePlayerName(value, LocalSeat);
+            if (IsHost)
+            {
+                playerNames[LocalSeat] = normalized;
+                Send(MessageType.PlayerNameUpdate, -1, Protocol.Json(
+                    new OnlinePlayerName { seat = LocalSeat, value = normalized }));
+                BroadcastLobby();
+            }
+            else
+            {
+                SendAction(new ActionRequest
+                {
+                    action = "set_player_name",
+                    data = Protocol.Json(new OnlinePlayerName
+                        { seat = LocalSeat, value = normalized })
+                });
+            }
+        }
 
         private void Awake()
         {
@@ -356,7 +385,8 @@ namespace KaitouOnline
                 confirmedHumanPlayers = confirmedHumanPlayers,
                 cpuPlayers = cpuPlayers,
                 participantsConfirmed = participantsConfirmed,
-                gameStarted = false
+                gameStarted = false,
+                playerNames = (string[])playerNames.Clone()
             };
             Send(MessageType.LobbyState, -1, Protocol.Json(state));
         }
@@ -398,6 +428,26 @@ namespace KaitouOnline
                 confirmedHumanPlayers = Mathf.Clamp(lobby.confirmedHumanPlayers, 0, 4);
                 cpuPlayers = Mathf.Clamp(lobby.cpuPlayers, 0, 2);
                 participantsConfirmed = lobby.participantsConfirmed;
+                ApplyPlayerNames(lobby.playerNames);
+            }
+            else if (envelope.type == MessageType.ActionRequest && IsHost)
+            {
+                ActionRequest request = Protocol.Parse<ActionRequest>(envelope.payload);
+                if (request.action == "set_player_name")
+                {
+                    OnlinePlayerName update = Protocol.Parse<OnlinePlayerName>(request.data);
+                    update.seat = envelope.senderSeat;
+                    update.value = NormalizePlayerName(update.value, update.seat);
+                    playerNames[update.seat] = update.value;
+                    Send(MessageType.PlayerNameUpdate, -1, Protocol.Json(update));
+                    BroadcastLobby();
+                }
+            }
+            else if (envelope.type == MessageType.PlayerNameUpdate)
+            {
+                OnlinePlayerName update = Protocol.Parse<OnlinePlayerName>(envelope.payload);
+                if (update.seat >= 0 && update.seat < playerNames.Length)
+                    playerNames[update.seat] = NormalizePlayerName(update.value, update.seat);
             }
             else if (envelope.type == MessageType.StartGame)
             {
@@ -437,6 +487,20 @@ namespace KaitouOnline
                 return;
             }
             MessageReceived?.Invoke(envelope);
+        }
+
+        private void ApplyPlayerNames(string[] values)
+        {
+            if (values == null) return;
+            for (int seat = 0; seat < playerNames.Length && seat < values.Length; seat++)
+                playerNames[seat] = NormalizePlayerName(values[seat], seat);
+        }
+
+        private static string NormalizePlayerName(string value, int seat)
+        {
+            string result = (value ?? "").Trim();
+            if (result.Length > 12) result = result.Substring(0, 12);
+            return string.IsNullOrEmpty(result) ? $"Player{seat + 1}" : result;
         }
 
         private static string RelayConnectionType()

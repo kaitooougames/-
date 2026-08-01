@@ -323,11 +323,8 @@ public static class SpecialActionCardSystem
         List<string> values = new List<string>();
         foreach (CardInteraction card in cards)
         {
-            if (card == null) continue;
-            values.Add(((int)card.specialEffect) + ":" +
-                       (card.isExhibit ? "E" : "-") +
-                       (card.isPhantomThief ? "T" : "-") +
-                       (card.isCage ? "C" : "-"));
+            if (card == null || !card.IsSpecialAction) continue;
+            values.Add(((int)card.specialEffect).ToString());
         }
         values.Sort(System.StringComparer.Ordinal);
         return string.Join(",", values);

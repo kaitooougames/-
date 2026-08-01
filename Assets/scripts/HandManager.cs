@@ -599,12 +599,15 @@ public class HandManager : MonoBehaviour
             string cageStatus = actionPlayerCount == 2
                 ? $"  檻:{SpecialActionCardSystem.GetConsecutiveCageCount(id)}/3"
                 : "";
-            int shownPlayerNumber = KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession
-                ? KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(id) + 1
-                : id + 1;
+            bool online = KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession;
+            int networkSeat = online
+                ? KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(id) : id;
+            string shownName = online && KaitouOnline.KaitouOnlineSession.Instance != null
+                ? KaitouOnline.KaitouOnlineSession.Instance.GetPlayerName(networkSeat)
+                : $"P{networkSeat + 1}";
             GUI.Label(new Rect(startX + width * i, Screen.height + playerCountsOffset.y * uiScale,
                     width, 34f * uiScale),
-                $"P{shownPlayerNumber}  行動:{actionCount}  宝:{treasureCount}{cageStatus}{prisonStatus}", style);
+                $"{shownName}  行動:{actionCount}  宝:{treasureCount}{cageStatus}{prisonStatus}", style);
         }
     }
 
