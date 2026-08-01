@@ -221,16 +221,24 @@ public class CameraController : MonoBehaviour
         }
 
         // 一斉判定。怪盗の逮捕は1回、報酬は単独正解なら2枚、同じ怪盗への複数正解なら各1枚。
-        foreach (KeyValuePair<int, List<int>> result in successfulDetectivesByTarget)
+        List<int> successfulTargets = new List<int>(successfulDetectivesByTarget.Keys);
+        successfulTargets.Sort((left, right) =>
+            KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(left).CompareTo(
+                KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(right)));
+        foreach (int successfulTarget in successfulTargets)
         {
-            CardInteraction targetCard = GetSelectedActionCard(result.Key);
+            List<int> successfulDetectives = successfulDetectivesByTarget[successfulTarget];
+            successfulDetectives.Sort((left, right) =>
+                KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(left).CompareTo(
+                    KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(right)));
+            CardInteraction targetCard = GetSelectedActionCard(successfulTarget);
             if (targetCard == null) continue;
 
             SpecialActionCardSystem.MarkDetectiveExcluded(targetCard);
             ArrestHandler.Instance?.ArrestFromExternalEffect(targetCard);
 
-            int rewardCount = result.Value.Count >= 2 ? 1 : 2;
-            foreach (int detectiveSeat in result.Value)
+            int rewardCount = successfulDetectives.Count >= 2 ? 1 : 2;
+            foreach (int detectiveSeat in successfulDetectives)
             {
                 KaitouOnline.KaitouOnlineGameBridge.PrepareDetectiveRewardRandom(
                     handManager != null ? handManager.CurrentDay : 1,
@@ -240,8 +248,17 @@ public class CameraController : MonoBehaviour
             }
 
             Debug.Log(
-                $"【名探偵成功】Player{result.Key + 1}の怪盗を逮捕・当日除外。" +
-                $"正解者{result.Value.Count}人、各自の特殊カード報酬{rewardCount}枚");
+                $"【名探偵成功】Player{successfulTarget + 1}の怪盗を逮捕・当日除外。" +
+                $"正解者{successfulDetectives.Count}人、各自の特殊カード報酬{rewardCount}枚");
+        }
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+        {
+            int checkpointDay = handManager != null ? handManager.CurrentDay : 1;
+            KaitouOnline.KaitouOnlineGameBridge.BeginStateCheckpoint(
+                checkpointDay, "detective");
+            while (KaitouOnline.KaitouOnlineGameBridge.IsWaitingForStateCheckpoint(
+                       checkpointDay, "detective"))
+                yield return null;
         }
         detectiveAnnouncement = "まもなく全員の行動カードを公開します";
         yield return new WaitForSeconds(1.25f);

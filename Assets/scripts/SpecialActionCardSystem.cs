@@ -316,6 +316,23 @@ public static class SpecialActionCardSystem
         handManager?.RefreshActionHandLayout();
     }
 
+    public static string BuildActionHandSignature(int actionSeat)
+    {
+        List<CardInteraction> cards = GetCards(actionSeat);
+        if (cards == null) return "missing";
+        List<string> values = new List<string>();
+        foreach (CardInteraction card in cards)
+        {
+            if (card == null) continue;
+            values.Add(((int)card.specialEffect) + ":" +
+                       (card.isExhibit ? "E" : "-") +
+                       (card.isPhantomThief ? "T" : "-") +
+                       (card.isCage ? "C" : "-"));
+        }
+        values.Sort(System.StringComparer.Ordinal);
+        return string.Join(",", values);
+    }
+
     public static bool IsImprisoned(int seat) =>
         imprisonedUntilEndOfDay.ContainsKey(seat);
 

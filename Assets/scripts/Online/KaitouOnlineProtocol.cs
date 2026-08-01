@@ -28,7 +28,9 @@ namespace KaitouOnline
         PrivateState,
         GameOver,
         ReturnToLobby,
-        TurnCleanup
+        TurnCleanup,
+        StateCheckpointResult,
+        DesyncDetected
     }
 
     [Serializable]
@@ -169,11 +171,22 @@ namespace KaitouOnline
         public int[] treasureIds;
     }
 
+    [Serializable]
+    public struct StateCheckpoint
+    {
+        public int day;
+        public string checkpoint;
+        public int actorSeat;
+        public string signature;
+        public bool success;
+        public string message;
+    }
+
     public static class Protocol
     {
         // オンライン進行規約。古いMacビルドとの混在を防ぐため、
         // フェーズ同期方式を変更したら必ず更新する。
-        public const int Version = 11;
+        public const int Version = 12;
         public const string MessageName = "KaitouOnlineEvent";
 
         public static string Json<T>(T value) => JsonUtility.ToJson(value);

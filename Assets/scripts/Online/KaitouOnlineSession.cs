@@ -216,6 +216,10 @@ namespace KaitouOnline
             if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
                 NetworkManager.Singleton.Shutdown();
             joinCode = "";
+            onlineGameStarted = false;
+            participantsConfirmed = false;
+            confirmedHumanPlayers = 0;
+            cpuPlayers = 0;
             Report("切断しました。");
         }
 

@@ -53,6 +53,10 @@ namespace KaitouOnline
         private readonly Dictionary<string, int> frameUpChoices =
             new Dictionary<string, int>();
         private readonly HashSet<int> turnCleanupReleasedDays = new HashSet<int>();
+        private readonly Dictionary<string, Dictionary<int, string>> checkpointSignatures =
+            new Dictionary<string, Dictionary<int, string>>();
+        private readonly HashSet<string> completedCheckpoints = new HashSet<string>();
+        private bool desyncAbortStarted;
 
         private void Awake()
         {
@@ -77,6 +81,28 @@ namespace KaitouOnline
             PriorityMessage = WaitingMessage;
             Debug.LogError("【オンライン進行停止】" + WaitingMessage);
         }
+
+        public static void BeginStateCheckpoint(int day, string checkpoint)
+        {
+            if (!IsOnlineSession || Instance == null) return;
+            string signature = Instance.BuildActionStateSignature();
+            Instance.session.SendAction(new ActionRequest
+            {
+                action = "state_checkpoint",
+                actorSeat = Instance.session.LocalSeat,
+                data = Protocol.Json(new StateCheckpoint
+                {
+                    day = day,
+                    checkpoint = checkpoint,
+                    actorSeat = Instance.session.LocalSeat,
+                    signature = signature
+                })
+            });
+        }
+
+        public static bool IsWaitingForStateCheckpoint(int day, string checkpoint) =>
+            IsOnlineSession && Instance != null &&
+            !Instance.completedCheckpoints.Contains(CheckpointKey(day, checkpoint));
 
         public static bool SubmitLocalAction(CardInteraction card, int declaredNumber)
         {
@@ -773,6 +799,14 @@ namespace KaitouOnline
                     session.Send(MessageType.DetectiveChoice, -1, request.data);
                     return;
                 }
+                if (request.action == "state_checkpoint")
+                {
+                    StateCheckpoint checkpoint =
+                        Protocol.Parse<StateCheckpoint>(request.data);
+                    checkpoint.actorSeat = envelope.senderSeat;
+                    Instance.ReceiveStateCheckpoint(checkpoint);
+                    return;
+                }
                 if (request.action == "appraiser_type_choice")
                 {
                     session.Send(MessageType.AppraiserTypeChoice, -1, request.data);
@@ -944,6 +978,24 @@ namespace KaitouOnline
                 return;
             }
 
+            if (envelope.type == MessageType.StateCheckpointResult)
+            {
+                StateCheckpoint result =
+                    Protocol.Parse<StateCheckpoint>(envelope.payload);
+                if (result.success)
+                    completedCheckpoints.Add(CheckpointKey(result.day, result.checkpoint));
+                return;
+            }
+
+            if (envelope.type == MessageType.DesyncDetected)
+            {
+                StateCheckpoint result =
+                    Protocol.Parse<StateCheckpoint>(envelope.payload);
+                if (!desyncAbortStarted)
+                    StartCoroutine(DisconnectAfterDesync(result.message));
+                return;
+            }
+
             if (envelope.type == MessageType.AppraiserTypeChoice)
             {
                 OnlineSeatChoice choice =
@@ -972,6 +1024,58 @@ namespace KaitouOnline
                 handler?.ApplyOnlineFrameUpChoice(choice.actorSeat, choice.value);
             }
         }
+
+
+        private string BuildActionStateSignature()
+        {
+            List<string> seats = new List<string>();
+            for (int networkSeat = 0; networkSeat < session.RoomPlayerCount; networkSeat++)
+            {
+                int localSeat = LocalIndexForNetworkSeat(networkSeat);
+                seats.Add(networkSeat + "=" +
+                          SpecialActionCardSystem.BuildActionHandSignature(localSeat));
+            }
+            return string.Join("|", seats);
+        }
+
+        private void ReceiveStateCheckpoint(StateCheckpoint checkpoint)
+        {
+            string key = CheckpointKey(checkpoint.day, checkpoint.checkpoint);
+            if (!checkpointSignatures.TryGetValue(key, out Dictionary<int, string> values))
+            {
+                values = new Dictionary<int, string>();
+                checkpointSignatures[key] = values;
+            }
+            values[checkpoint.actorSeat] = checkpoint.signature ?? "";
+            int expected = Mathf.Max(1, session.ConfirmedHumanPlayers);
+            if (values.Count < expected) return;
+
+            string first = null;
+            bool matches = true;
+            foreach (KeyValuePair<int, string> value in values)
+            {
+                if (first == null) first = value.Value;
+                else if (first != value.Value) matches = false;
+            }
+            StateCheckpoint result = checkpoint;
+            result.success = matches;
+            result.message = matches ? "" :
+                "名探偵の処理結果が端末間で一致しなかったため、接続を終了しました。";
+            session.Send(matches ? MessageType.StateCheckpointResult :
+                MessageType.DesyncDetected, -1, Protocol.Json(result));
+        }
+
+        private System.Collections.IEnumerator DisconnectAfterDesync(string message)
+        {
+            desyncAbortStarted = true;
+            MarkConnectionLost(message);
+            yield return new WaitForSecondsRealtime(0.35f);
+            session?.Disconnect();
+            SceneManager.LoadScene("MainMenu");
+        }
+
+        private static string CheckpointKey(int day, string checkpoint) =>
+            day + ":" + (checkpoint ?? "");
 
         private void BeginSecurityDiceInternal(SecurityDice dice,
             List<Player> players, int day)
