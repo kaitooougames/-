@@ -301,6 +301,8 @@ namespace KaitouOnline
             {
                 sceneName = "IntegratedGameScene",
                 playerCount = Instance.session.RoomPlayerCount,
+                humanPlayerCount = Instance.session.ConfirmedHumanPlayers,
+                cpuPlayers = Instance.session.CpuPlayers,
                 randomSeed = Random.Range(1, int.MaxValue)
             };
             Instance.session.Send(MessageType.RestartGame, -1, Protocol.Json(state));
@@ -919,30 +921,44 @@ namespace KaitouOnline
 
         private int LocalIndexForNetworkSeat(int networkSeat)
         {
-            int localSeat = session.LocalSeat;
+            int order = NetworkSeatOrder(networkSeat);
             if (session.RoomPlayerCount == 3)
-            {
-                if (networkSeat == localSeat) return 0;
-                if (networkSeat < session.RequiredHumanPlayers) return 2;
-                return 3;
-            }
-            if (networkSeat == localSeat) return 0;
-            if (networkSeat == 0) return localSeat;
-            return networkSeat;
+                return order == 0 ? 0 : order == 1 ? 2 : 3;
+            return order;
         }
 
         private int NetworkSeatForLocalIndex(int localIndex)
         {
-            int localSeat = session.LocalSeat;
-            if (session.RoomPlayerCount == 3)
+            int order = session.RoomPlayerCount == 3
+                ? localIndex == 0 ? 0 : localIndex == 2 ? 1 : 2
+                : localIndex;
+            return NetworkSeatAtOrder(order);
+        }
+
+        private int NetworkSeatOrder(int networkSeat)
+        {
+            if (networkSeat == session.LocalSeat) return 0;
+            int order = 1;
+            for (int seat = 0; seat < session.RoomPlayerCount; seat++)
             {
-                if (localIndex == 0) return localSeat;
-                if (localIndex == 2) return localSeat == 0 ? 1 : 0;
-                if (localIndex == 3) return 2;
+                if (seat == session.LocalSeat) continue;
+                if (seat == networkSeat) return order;
+                order++;
             }
-            if (localIndex == 0) return localSeat;
-            if (localIndex == localSeat) return 0;
-            return localIndex;
+            return -1;
+        }
+
+        private int NetworkSeatAtOrder(int targetOrder)
+        {
+            if (targetOrder == 0) return session.LocalSeat;
+            int order = 1;
+            for (int seat = 0; seat < session.RoomPlayerCount; seat++)
+            {
+                if (seat == session.LocalSeat) continue;
+                if (order == targetOrder) return seat;
+                order++;
+            }
+            return -1;
         }
 
         private static void ReadParticipantState(int localIndex,
@@ -1033,8 +1049,8 @@ namespace KaitouOnline
 
         private void EnsureHostCpuChoices(int day)
         {
-            if (!session.IsHost || hostChoices.Count < session.RequiredHumanPlayers) return;
-            for (int networkSeat = session.RequiredHumanPlayers;
+            if (!session.IsHost || hostChoices.Count < session.ConfirmedHumanPlayers) return;
+            for (int networkSeat = session.ConfirmedHumanPlayers;
                  networkSeat < session.RoomPlayerCount; networkSeat++)
             {
                 if (hostChoices.ContainsKey(networkSeat)) continue;

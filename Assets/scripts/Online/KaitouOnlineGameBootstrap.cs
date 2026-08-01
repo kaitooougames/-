@@ -23,13 +23,14 @@ namespace KaitouOnline
 
             if (session.GameSeed != 0) Random.InitState(session.GameSeed);
 
+            // 宝配布にも同じ席変換を使うため、人数反映より先にBridgeを用意する。
+            if (Object.FindFirstObjectByType<KaitouOnlineGameBridge>() == null)
+                new GameObject("KaitouOnlineGameBridge").AddComponent<KaitouOnlineGameBridge>();
+
             HandManager.SetPlayerCountGlobally(session.RoomPlayerCount);
             TreasureGame.TreasureController treasure =
                 Object.FindFirstObjectByType<TreasureGame.TreasureController>();
             treasure?.PreparePlayerCount(session.RoomPlayerCount);
-
-            if (Object.FindFirstObjectByType<KaitouOnlineGameBridge>() == null)
-                new GameObject("KaitouOnlineGameBridge").AddComponent<KaitouOnlineGameBridge>();
 
             Debug.Log($"<color=#70E8FF>【オンライン盤】P{session.LocalSeat + 1}として参加。"+
                       $"部屋人数：{session.RoomPlayerCount}</color>");

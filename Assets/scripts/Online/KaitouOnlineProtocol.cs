@@ -46,8 +46,9 @@ namespace KaitouOnline
     {
         public int playerCount;
         public int connectedPlayers;
-        public int requiredHumanPlayers;
+        public int confirmedHumanPlayers;
         public int cpuPlayers;
+        public bool participantsConfirmed;
         public bool gameStarted;
     }
 
@@ -63,6 +64,8 @@ namespace KaitouOnline
     {
         public string sceneName;
         public int playerCount;
+        public int humanPlayerCount;
+        public int cpuPlayers;
         public int randomSeed;
     }
 
@@ -168,7 +171,7 @@ namespace KaitouOnline
     {
         // オンライン進行規約。古いMacビルドとの混在を防ぐため、
         // フェーズ同期方式を変更したら必ず更新する。
-        public const int Version = 8;
+        public const int Version = 9;
         public const string MessageName = "KaitouOnlineEvent";
 
         public static string Json<T>(T value) => JsonUtility.ToJson(value);

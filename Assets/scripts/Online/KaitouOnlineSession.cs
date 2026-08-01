@@ -21,8 +21,9 @@ namespace KaitouOnline
         public event Action<Envelope> MessageReceived;
 
         [SerializeField, Range(2, 4)] private int roomPlayerCount = 2;
-        [SerializeField, Range(2, 4)] private int requiredHumanPlayers = 2;
+        [SerializeField, Range(0, 4)] private int confirmedHumanPlayers;
         [SerializeField, Range(0, 2)] private int cpuPlayers;
+        [SerializeField] private bool participantsConfirmed;
         private string joinCode = "";
         private int sequence;
         private bool connecting;
@@ -31,7 +32,8 @@ namespace KaitouOnline
 
         public string JoinCode => joinCode;
         public int RoomPlayerCount => roomPlayerCount;
-        public int RequiredHumanPlayers => requiredHumanPlayers;
+        public int ConfirmedHumanPlayers => confirmedHumanPlayers;
+        public bool ParticipantsConfirmed => participantsConfirmed;
         public int CpuPlayers => cpuPlayers;
         public int LocalSeat =>
             NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening
@@ -69,22 +71,23 @@ namespace KaitouOnline
             UnregisterCallbacks();
         }
 
-        public async void CreateRoom(int players) => await CreateRoomAsync(players);
+        public async void CreateRoom() => await CreateRoomAsync();
         public async void JoinRoom(string code) => await JoinRoomAsync(code);
 
-        public async Task CreateRoomAsync(int players)
+        public async Task CreateRoomAsync()
         {
             if (connecting) return;
             connecting = true;
             try
             {
-                requiredHumanPlayers = Mathf.Clamp(players, 2, 4);
+                confirmedHumanPlayers = 0;
+                participantsConfirmed = false;
                 cpuPlayers = 0;
-                roomPlayerCount = requiredHumanPlayers;
+                roomPlayerCount = 2;
                 await SignInAsync();
                 NetworkManager manager = NetworkManager.Singleton;
                 UnityTransport transport = manager.GetComponent<UnityTransport>();
-                Allocation allocation = await RelayService.Instance.CreateAllocationAsync(requiredHumanPlayers - 1);
+                Allocation allocation = await RelayService.Instance.CreateAllocationAsync(3);
                 joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
                 transport.SetRelayServerData(new RelayServerData(allocation, RelayConnectionType()));
                 if (!manager.StartHost()) throw new InvalidOperationException("ホストを開始できませんでした。");
@@ -131,18 +134,34 @@ namespace KaitouOnline
 
         public void SetCpuPlayers(int count)
         {
-            if (!IsHost || onlineGameStarted) return;
+            if (!IsHost || onlineGameStarted || !participantsConfirmed) return;
             cpuPlayers = Mathf.Clamp(count, 0,
-                Mathf.Max(0, 4 - Mathf.Max(requiredHumanPlayers, ConnectedPlayers)));
-            roomPlayerCount = Mathf.Clamp(
-                Mathf.Max(requiredHumanPlayers, ConnectedPlayers) + cpuPlayers, 2, 4);
+                Mathf.Max(0, 4 - confirmedHumanPlayers));
+            roomPlayerCount = Mathf.Clamp(confirmedHumanPlayers + cpuPlayers, 2, 4);
             BroadcastLobby();
+        }
+
+        public bool ConfirmParticipants()
+        {
+            if (!IsHost || onlineGameStarted || ConnectedPlayers < 2 || ConnectedPlayers > 4)
+                return false;
+            confirmedHumanPlayers = ConnectedPlayers;
+            participantsConfirmed = true;
+            cpuPlayers = 0;
+            roomPlayerCount = confirmedHumanPlayers;
+            BroadcastLobby();
+            Report($"参加者{confirmedHumanPlayers}人を確定しました。CPU人数を選んでください。");
+            return true;
         }
 
         public void ReturnToLobby()
         {
             if (!IsHost || !IsOnline) return;
             onlineGameStarted = false;
+            participantsConfirmed = false;
+            confirmedHumanPlayers = 0;
+            cpuPlayers = 0;
+            roomPlayerCount = Mathf.Clamp(ConnectedPlayers, 2, 4);
             Send(MessageType.ReturnToLobby, -1, "");
             BroadcastLobby();
             SceneManager.LoadScene("MainMenu");
@@ -156,6 +175,9 @@ namespace KaitouOnline
             {
                 StartGameState start = Protocol.Parse<StartGameState>(payload);
                 roomPlayerCount = Mathf.Clamp(start.playerCount, 2, 4);
+                confirmedHumanPlayers = Mathf.Clamp(start.humanPlayerCount, 2, 4);
+                cpuPlayers = Mathf.Clamp(start.cpuPlayers, 0, 2);
+                participantsConfirmed = true;
                 gameSeed = start.randomSeed;
                 onlineGameStarted = true;
             }
@@ -163,6 +185,9 @@ namespace KaitouOnline
             {
                 StartGameState restart = Protocol.Parse<StartGameState>(payload);
                 roomPlayerCount = Mathf.Clamp(restart.playerCount, 2, 4);
+                confirmedHumanPlayers = Mathf.Clamp(restart.humanPlayerCount, 2, 4);
+                cpuPlayers = Mathf.Clamp(restart.cpuPlayers, 0, 2);
+                participantsConfirmed = true;
                 gameSeed = restart.randomSeed;
                 onlineGameStarted = true;
             }
@@ -273,6 +298,9 @@ namespace KaitouOnline
         private void OnClientConnected(ulong clientId)
         {
             if (!IsHost) return;
+            if (!onlineGameStarted && participantsConfirmed &&
+                ConnectedPlayers != confirmedHumanPlayers)
+                ResetLobbySelection();
             if (clientId != NetworkManager.Singleton.LocalClientId)
             {
                 SeatAssignment assignment = new SeatAssignment { seat = (int)clientId, host = false };
@@ -297,12 +325,22 @@ namespace KaitouOnline
             }
             else if (IsHost)
             {
-                Report($"参加者が切断しました（現在 {ConnectedPlayers}/{requiredHumanPlayers}人）");
+                Report($"参加者が切断しました（現在 {ConnectedPlayers}人）");
                 if (onlineGameStarted)
                     KaitouOnlineGameBridge.MarkConnectionLost(
                         "相手とのオンライン接続が切れました。ゲームを停止しています。");
+                else
+                    ResetLobbySelection();
                 BroadcastLobby();
             }
+        }
+
+        private void ResetLobbySelection()
+        {
+            participantsConfirmed = false;
+            confirmedHumanPlayers = 0;
+            cpuPlayers = 0;
+            roomPlayerCount = Mathf.Clamp(ConnectedPlayers, 2, 4);
         }
 
         private void BroadcastLobby()
@@ -311,8 +349,9 @@ namespace KaitouOnline
             {
                 playerCount = roomPlayerCount,
                 connectedPlayers = ConnectedPlayers,
-                requiredHumanPlayers = requiredHumanPlayers,
+                confirmedHumanPlayers = confirmedHumanPlayers,
                 cpuPlayers = cpuPlayers,
+                participantsConfirmed = participantsConfirmed,
                 gameStarted = false
             };
             Send(MessageType.LobbyState, -1, Protocol.Json(state));
@@ -352,19 +391,26 @@ namespace KaitouOnline
             {
                 LobbyState lobby = Protocol.Parse<LobbyState>(envelope.payload);
                 roomPlayerCount = Mathf.Clamp(lobby.playerCount, 2, 4);
-                requiredHumanPlayers = Mathf.Clamp(lobby.requiredHumanPlayers, 2, 4);
+                confirmedHumanPlayers = Mathf.Clamp(lobby.confirmedHumanPlayers, 0, 4);
                 cpuPlayers = Mathf.Clamp(lobby.cpuPlayers, 0, 2);
+                participantsConfirmed = lobby.participantsConfirmed;
             }
             else if (envelope.type == MessageType.StartGame)
             {
                 StartGameState start = Protocol.Parse<StartGameState>(envelope.payload);
                 roomPlayerCount = Mathf.Clamp(start.playerCount, 2, 4);
+                confirmedHumanPlayers = Mathf.Clamp(start.humanPlayerCount, 2, 4);
+                cpuPlayers = Mathf.Clamp(start.cpuPlayers, 0, 2);
+                participantsConfirmed = true;
                 gameSeed = start.randomSeed;
                 onlineGameStarted = true;
             }
             else if (envelope.type == MessageType.ReturnToLobby)
             {
                 onlineGameStarted = false;
+                participantsConfirmed = false;
+                confirmedHumanPlayers = 0;
+                cpuPlayers = 0;
                 if (SceneManager.GetActiveScene().name != "MainMenu")
                     SceneManager.LoadScene("MainMenu");
             }
@@ -372,6 +418,9 @@ namespace KaitouOnline
             {
                 StartGameState restart = Protocol.Parse<StartGameState>(envelope.payload);
                 roomPlayerCount = Mathf.Clamp(restart.playerCount, 2, 4);
+                confirmedHumanPlayers = Mathf.Clamp(restart.humanPlayerCount, 2, 4);
+                cpuPlayers = Mathf.Clamp(restart.cpuPlayers, 0, 2);
+                participantsConfirmed = true;
                 gameSeed = restart.randomSeed;
                 onlineGameStarted = true;
             }
