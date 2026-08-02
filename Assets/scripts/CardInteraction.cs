@@ -48,6 +48,7 @@ public class CardInteraction : MonoBehaviour
     private Renderer[] visualRenderers;
     private bool[] visibilityBeforePrivacyHide;
     private bool privacyHidden;
+    private Coroutine pendingPrivacyHide;
     private MaterialPropertyBlock clickAppearanceBlock;
     public bool isClickable
     {
@@ -120,6 +121,11 @@ public class CardInteraction : MonoBehaviour
 
     public void SetVisualVisible(bool visible)
     {
+        if (visible && pendingPrivacyHide != null)
+        {
+            StopCoroutine(pendingPrivacyHide);
+            pendingPrivacyHide = null;
+        }
         if (visualRenderers == null || visualRenderers.Length == 0)
             visualRenderers = GetComponentsInChildren<Renderer>(true);
         if (!visible)
@@ -151,15 +157,16 @@ public class CardInteraction : MonoBehaviour
 
     public void MoveToHidden(Vector3 newPosition, float speed = 5f)
     {
-        StopCoroutine(nameof(MoveThenHide));
-        StartCoroutine(MoveThenHide(newPosition, speed));
-    }
-
-    private IEnumerator MoveThenHide(Vector3 newPosition, float speed)
-    {
+        if (pendingPrivacyHide != null) StopCoroutine(pendingPrivacyHide);
         SetVisualVisible(true);
         MoveTo(newPosition, speed);
+        pendingPrivacyHide = StartCoroutine(HideAfterMove());
+    }
+
+    private IEnumerator HideAfterMove()
+    {
         while (isMoving) yield return null;
+        pendingPrivacyHide = null;
         SetVisualVisible(false);
     }
 

@@ -26,6 +26,7 @@ namespace KaitouOnline
         private AudioClip clickClip;
         private string playerName = "";
         private bool playerNameSent;
+        private float nextPlayerNameSendTime;
 
         private void Start()
         {
@@ -129,6 +130,7 @@ namespace KaitouOnline
             if ((session == null || !session.IsOnline) &&
                 MenuButton(new Rect(x, Screen.height * 0.39f, width, 64), "部屋を作る", button))
             {
+                SavePlayerNamePreference();
                 EnsureSession();
                 session.CreateRoom();
             }
@@ -148,6 +150,7 @@ namespace KaitouOnline
                     PasteJoinCode();
                 if (MenuButton(new Rect(x, Screen.height * 0.58f, width, 64), "参加コードで入る", button))
                 {
+                    SavePlayerNamePreference();
                     EnsureSession();
                     session.JoinRoom(joinCode);
                 }
@@ -157,11 +160,17 @@ namespace KaitouOnline
             {
                 if (!playerNameSent)
                 {
-                    if (session.SetLocalPlayerName(playerName))
+                    int localSeat = session.LocalSeat;
+                    string expectedName = string.IsNullOrWhiteSpace(playerName)
+                        ? $"Player{localSeat + 1}" : playerName.Trim();
+                    if (localSeat >= 0 && session.GetPlayerName(localSeat) == expectedName)
                     {
                         playerNameSent = true;
-                        PlayerPrefs.SetString(PlayerNamePreference, playerName.Trim());
-                        PlayerPrefs.Save();
+                    }
+                    else if (Time.unscaledTime >= nextPlayerNameSendTime &&
+                             session.SetLocalPlayerName(playerName))
+                    {
+                        nextPlayerNameSendTime = Time.unscaledTime + 1f;
                     }
                 }
                 GUI.Label(new Rect(x, Screen.height * 0.67f,
@@ -240,6 +249,12 @@ namespace KaitouOnline
 
         private void OnStatus(string value) => status = value;
         private void OnJoinCode(string value) => joinCode = value;
+
+        private void SavePlayerNamePreference()
+        {
+            PlayerPrefs.SetString(PlayerNamePreference, (playerName ?? "").Trim());
+            PlayerPrefs.Save();
+        }
 
         private void CopyJoinCode(string value)
         {

@@ -30,6 +30,7 @@ namespace KaitouOnline
         private int gameSeed;
         private bool onlineGameStarted;
         private readonly string[] playerNames = { "Player1", "Player2", "Player3", "Player4" };
+        private bool fatalReturnStarted;
 
         public string JoinCode => joinCode;
         public int RoomPlayerCount => roomPlayerCount;
@@ -57,7 +58,9 @@ namespace KaitouOnline
 
         public bool SetLocalPlayerName(string value)
         {
-            if (!IsOnline || LocalSeat < 0) return false;
+            NetworkManager manager = NetworkManager.Singleton;
+            if (!IsOnline || LocalSeat < 0 || manager == null ||
+                (!manager.IsHost && !manager.IsConnectedClient)) return false;
             string normalized = NormalizePlayerName(value, LocalSeat);
             if (IsHost)
             {
@@ -107,6 +110,7 @@ namespace KaitouOnline
         public async Task CreateRoomAsync()
         {
             if (connecting) return;
+            fatalReturnStarted = false;
             connecting = true;
             try
             {
@@ -133,6 +137,7 @@ namespace KaitouOnline
         public async Task JoinRoomAsync(string code)
         {
             if (connecting) return;
+            fatalReturnStarted = false;
             string normalized = (code ?? "").Trim().ToUpperInvariant();
             if (string.IsNullOrEmpty(normalized))
             {
@@ -243,10 +248,11 @@ namespace KaitouOnline
 
         public void Disconnect()
         {
+            onlineGameStarted = false;
+            fatalReturnStarted = true;
             if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
                 NetworkManager.Singleton.Shutdown();
             joinCode = "";
-            onlineGameStarted = false;
             participantsConfirmed = false;
             confirmedHumanPlayers = 0;
             cpuPlayers = 0;
@@ -350,23 +356,40 @@ namespace KaitouOnline
             if (NetworkManager.Singleton != null &&
                 clientId == NetworkManager.Singleton.LocalClientId)
             {
-                Report("オンライン接続が切れました。");
-                KaitouOnlineGameBridge.MarkConnectionLost(
-                    string.IsNullOrEmpty(NetworkManager.Singleton.DisconnectReason)
-                        ? "オンライン接続が切れました。ゲームを停止しています。"
-                        : "オンライン接続が切れました：" +
-                          NetworkManager.Singleton.DisconnectReason);
+                string message = string.IsNullOrEmpty(NetworkManager.Singleton.DisconnectReason)
+                    ? "オンライン接続が切れたため、ホームへ戻ります。"
+                    : "オンライン接続が切れました：" +
+                      NetworkManager.Singleton.DisconnectReason;
+                if (onlineGameStarted) StartCoroutine(ReturnHomeAfterConnectionLoss(message));
+                else Report(message);
             }
             else if (IsHost)
             {
                 Report($"参加者が切断しました（現在 {ConnectedPlayers}人）");
                 if (onlineGameStarted)
-                    KaitouOnlineGameBridge.MarkConnectionLost(
-                        "相手とのオンライン接続が切れました。ゲームを停止しています。");
+                    StartCoroutine(ReturnHomeAfterConnectionLoss(
+                        "相手とのオンライン接続が切れたため、ホームへ戻ります。"));
                 else
                     ResetLobbySelection();
                 BroadcastLobby();
             }
+        }
+
+        private System.Collections.IEnumerator ReturnHomeAfterConnectionLoss(string message)
+        {
+            if (fatalReturnStarted) yield break;
+            fatalReturnStarted = true;
+            onlineGameStarted = false;
+            KaitouOnlineGameBridge.MarkConnectionLost(message);
+            Report(message);
+            yield return new WaitForSecondsRealtime(0.35f);
+            NetworkManager manager = NetworkManager.Singleton;
+            if (manager != null && manager.IsListening) manager.Shutdown();
+            joinCode = "";
+            participantsConfirmed = false;
+            confirmedHumanPlayers = 0;
+            cpuPlayers = 0;
+            SceneManager.LoadScene("MainMenu");
         }
 
         private void ResetLobbySelection()

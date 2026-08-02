@@ -1418,6 +1418,10 @@ namespace KaitouOnline
                 {
                     Player3 participant = FindFirstObjectByType<Player3>();
                     if (isPass) participant?.SelectOnlinePass();
+                    else if (choice.specialEffect == (int)SpecialActionEffect.AdvanceNotice &&
+                             SpecialActionCardSystem.TryGetActiveAdvanceNotice(
+                                 2, out CardInteraction heldNotice))
+                        participant?.RestoreAdvanceNotice(heldNotice);
                     else participant?.SelectOnlineCard(choice.specialEffect, choice.isExhibit,
                         choice.isThief, choice.isCage, choice.declaredNumber);
                 }
@@ -1425,6 +1429,10 @@ namespace KaitouOnline
                 {
                     Player4 participant = FindFirstObjectByType<Player4>();
                     if (isPass) participant?.SelectOnlinePass();
+                    else if (choice.specialEffect == (int)SpecialActionEffect.AdvanceNotice &&
+                             SpecialActionCardSystem.TryGetActiveAdvanceNotice(
+                                 3, out CardInteraction heldNotice))
+                        participant?.RestoreAdvanceNotice(heldNotice);
                     else participant?.SelectOnlineCard(choice.specialEffect, choice.isExhibit,
                         choice.isThief, choice.isCage, choice.declaredNumber);
                 }
