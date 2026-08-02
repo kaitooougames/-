@@ -46,6 +46,8 @@ public class CardInteraction : MonoBehaviour
   
     private bool clickable = true;
     private Renderer[] visualRenderers;
+    private bool[] visibilityBeforePrivacyHide;
+    private bool privacyHidden;
     private MaterialPropertyBlock clickAppearanceBlock;
     public bool isClickable
     {
@@ -120,8 +122,31 @@ public class CardInteraction : MonoBehaviour
     {
         if (visualRenderers == null || visualRenderers.Length == 0)
             visualRenderers = GetComponentsInChildren<Renderer>(true);
-        foreach (Renderer visualRenderer in visualRenderers)
-            if (visualRenderer != null) visualRenderer.enabled = visible;
+        if (!visible)
+        {
+            if (privacyHidden) return;
+            visibilityBeforePrivacyHide = new bool[visualRenderers.Length];
+            for (int i = 0; i < visualRenderers.Length; i++)
+            {
+                Renderer visualRenderer = visualRenderers[i];
+                if (visualRenderer == null) continue;
+                visibilityBeforePrivacyHide[i] = visualRenderer.enabled;
+                visualRenderer.enabled = false;
+            }
+            privacyHidden = true;
+            return;
+        }
+
+        if (!privacyHidden) return;
+        for (int i = 0; i < visualRenderers.Length; i++)
+        {
+            Renderer visualRenderer = visualRenderers[i];
+            if (visualRenderer == null) continue;
+            visualRenderer.enabled = visibilityBeforePrivacyHide != null &&
+                                     i < visibilityBeforePrivacyHide.Length &&
+                                     visibilityBeforePrivacyHide[i];
+        }
+        privacyHidden = false;
     }
 
     public void MoveToHidden(Vector3 newPosition, float speed = 5f)

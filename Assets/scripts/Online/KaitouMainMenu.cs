@@ -6,6 +6,7 @@ namespace KaitouOnline
 {
     public sealed class KaitouMainMenu : MonoBehaviour
     {
+        private const string PlayerNamePreference = "KaitouTreasure.PlayerName";
 #if UNITY_WEBGL && !UNITY_EDITOR
         [DllImport("__Internal")]
         private static extern void KaitouCopyText(string text);
@@ -33,6 +34,7 @@ namespace KaitouOnline
             uiAudio.playOnAwake = false;
             uiAudio.volume = 0.42f;
             clickClip = CreateClickClip();
+            playerName = PlayerPrefs.GetString(PlayerNamePreference, "");
             if (KaitouOnlineSession.Instance != null &&
                 KaitouOnlineSession.Instance.IsOnline)
             {
@@ -155,8 +157,12 @@ namespace KaitouOnline
             {
                 if (!playerNameSent)
                 {
-                    session.SetLocalPlayerName(playerName);
-                    playerNameSent = true;
+                    if (session.SetLocalPlayerName(playerName))
+                    {
+                        playerNameSent = true;
+                        PlayerPrefs.SetString(PlayerNamePreference, playerName.Trim());
+                        PlayerPrefs.Save();
+                    }
                 }
                 GUI.Label(new Rect(x, Screen.height * 0.67f,
                         width - clipboardButtonWidth - 8f, 48),

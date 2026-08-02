@@ -55,9 +55,9 @@ namespace KaitouOnline
                 ? $"Player{seat + 1}" : playerNames[seat];
         }
 
-        public void SetLocalPlayerName(string value)
+        public bool SetLocalPlayerName(string value)
         {
-            if (!IsOnline || LocalSeat < 0) return;
+            if (!IsOnline || LocalSeat < 0) return false;
             string normalized = NormalizePlayerName(value, LocalSeat);
             if (IsHost)
             {
@@ -75,6 +75,7 @@ namespace KaitouOnline
                         { seat = LocalSeat, value = normalized })
                 });
             }
+            return true;
         }
 
         private void Awake()

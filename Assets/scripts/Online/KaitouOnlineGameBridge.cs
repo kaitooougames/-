@@ -1396,6 +1396,10 @@ namespace KaitouOnline
             foreach (ActionCardChoice choice in choices)
             {
                 if (choice.seat == session.LocalSeat) continue;
+                // ホストのCPUはEnsureHostCpuChoicesで既に実カードを選択・移動済み。
+                // Snapshotを重ねて適用すると同種の別カードまで卓上へ出て二重表示になる。
+                if (session.IsHost && choice.seat >= session.ConfirmedHumanPlayers)
+                    continue;
                 int localIndex = LocalIndexForNetworkSeat(choice.seat);
                 bool isPass = choice.specialEffect == 0 && !choice.isExhibit &&
                               !choice.isThief && !choice.isCage;
