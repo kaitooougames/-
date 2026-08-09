@@ -13,6 +13,12 @@ public class Player4 : MonoBehaviour
 
     public bool HasBeenArrested { get; set; } // プレイヤーが逮捕されたかどうか
     private bool hasAppliedPenalty = false;  // ペナルティが適用されたかどうかをチェックするフラグ
+    public bool HasPendingArrestPenalty => hasAppliedPenalty;
+
+    public void ApplyOnlinePenaltyPending(bool value)
+    {
+        hasAppliedPenalty = value;
+    }
     public GameObject arrestPenaltyCardPrefab;  // ペナルティカードのプレハブをInspectorで設定
     private bool isFirstOffense = false; // 初犯フラグ
 
@@ -60,11 +66,12 @@ public class Player4 : MonoBehaviour
         // ランダムに選択
         int randomIndex = Random.Range(0, selectableCards.Count);
         selectedCard = selectableCards[randomIndex];
-        selectedCard.SetVisualVisible(true);
+        selectedCard.EnsureVisibleForTable();
         SpecialActionCardSystem.NotifySelected(3, selectedCard);
 
         Vector3 player4Position = new Vector3(1, 0, 0);
-        selectedCard.MoveTo(player4Position, 2.5f);
+        if (!KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            selectedCard.MoveTo(player4Position, 2.5f);
     }
 
     public void RestoreAdvanceNotice(CardInteraction card)
@@ -80,13 +87,23 @@ public class Player4 : MonoBehaviour
         CardInteraction match = player4Cards.Find(card => card != null &&
             (int)card.specialEffect == specialEffect && card.isExhibit == exhibit &&
             card.isPhantomThief == thief && card.isCage == cage);
-        if (match == null) return;
+        if (match == null)
+            match = SpecialActionCardSystem.EnsureOnlineCardInHand(3, specialEffect,
+                exhibit, thief, cage, HandManager.Instance);
+        if (match == null)
+        {
+            Debug.LogError($"【オンライン】Player4の対応カードがありません。特殊:{specialEffect} " +
+                           $"展示:{exhibit} 怪盗:{thief} 檻:{cage}");
+            selectedCard = null;
+            SelectedNumber = 0;
+            return;
+        }
         selectedCard = match;
-        match.SetVisualVisible(true);
+        match.EnsureVisibleForTable();
         SelectedNumber = thief ? declaredNumber : 0;
         match.SelectedNumber = SelectedNumber;
         SpecialActionCardSystem.NotifySelected(3, match);
-        match.MoveTo(new Vector3(1f, 0f, 0f), 2.5f);
+        Debug.Log($"【オンライン卓上待機】local P4：{match.name} 宣言:{SelectedNumber}");
     }
 
     public void SelectOnlinePass()
@@ -311,10 +328,7 @@ public class Player4 : MonoBehaviour
         foreach (var card in player4Cards)
         {
             if (SpecialActionCardSystem.IsAdvanceNoticePendingCard(3, card)) continue;
-            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
-                card.MoveToHidden(new Vector3(5, 2, 0), 5);
-            else
-                card.MoveTo(new Vector3(5, 2, 0), 5);
+            card.MoveTo(new Vector3(5f, 2f, 0f), 5f);
         }
         if (!keepAdvanceNotice && activeStealEffect != null)
         {

@@ -25,12 +25,21 @@ namespace KaitouOnline
         private AudioSource uiAudio;
         private AudioClip clickClip;
         private string playerName = "";
+        private string playerNameBeforePaste = "";
         private bool playerNameSent;
         private float nextPlayerNameSendTime;
 
         private void Start()
         {
             Application.runInBackground = true;
+            // MainMenuシーンにはAudio Listenerが保存されていないため、
+            // ボタン音を鳴らすたび警告が出ないよう必ず1つ用意する。
+            if (FindFirstObjectByType<AudioListener>() == null)
+            {
+                GameObject listenerTarget = Camera.main != null
+                    ? Camera.main.gameObject : gameObject;
+                listenerTarget.AddComponent<AudioListener>();
+            }
             uiAudio = gameObject.AddComponent<AudioSource>();
             uiAudio.playOnAwake = false;
             uiAudio.volume = 0.42f;
@@ -161,9 +170,7 @@ namespace KaitouOnline
                 if (!playerNameSent)
                 {
                     int localSeat = session.LocalSeat;
-                    string expectedName = string.IsNullOrWhiteSpace(playerName)
-                        ? $"Player{localSeat + 1}" : playerName.Trim();
-                    if (localSeat >= 0 && session.GetPlayerName(localSeat) == expectedName)
+                    if (localSeat >= 0 && session.LocalPlayerNameConfirmed)
                     {
                         playerNameSent = true;
                     }
@@ -269,6 +276,10 @@ namespace KaitouOnline
 
         private void PasteJoinCode()
         {
+            // WebGLの非同期ペーストでIMGUIの入力フォーカスが切り替わっても、
+            // 入力済みのプレイヤー名は変更しない。
+            playerNameBeforePaste = playerName;
+            SavePlayerNamePreference();
 #if UNITY_WEBGL && !UNITY_EDITOR
             status = "クリップボードから参加コードを読み込んでいます…";
             KaitouPasteText(gameObject.name, nameof(ReceivePastedJoinCode));
@@ -279,6 +290,7 @@ namespace KaitouOnline
 
         public void ReceivePastedJoinCode(string value)
         {
+            playerName = playerNameBeforePaste;
             joinCode = (value ?? "").Trim().ToUpperInvariant();
             if (joinCode.Length > 12) joinCode = joinCode.Substring(0, 12);
             status = string.IsNullOrEmpty(joinCode)

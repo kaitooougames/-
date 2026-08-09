@@ -34,6 +34,11 @@ public class CameraController : MonoBehaviour
     private string detectiveAnnouncement = "";
     private AudioSource detectiveAudioSource;
     private AudioClip detectiveWrongClip;
+    private Camera controlledCamera;
+    private int lastViewportWidth = -1;
+    private int lastViewportHeight = -1;
+    private bool lastViewportOnline;
+    private const float FixedGameAspect = 16f / 9f;
     private bool appraiserTypeChoiceActive;
     private int appraiserChosenType = -1;
     private bool appraiserConfirmActive;
@@ -46,6 +51,8 @@ public class CameraController : MonoBehaviour
 
     private void Start()
     {
+        controlledCamera = GetComponent<Camera>();
+        ApplyFixedAspectViewport();
         // **SecurityDice が未設定なら探す**
         if (securityDice == null)
         {
@@ -67,7 +74,36 @@ public class CameraController : MonoBehaviour
     }
     private void Update()
     {
+        ApplyFixedAspectViewport();
         SyncPrisonFloorMarkers();
+    }
+
+    private void ApplyFixedAspectViewport()
+    {
+        if (controlledCamera == null) controlledCamera = GetComponent<Camera>();
+        bool online = KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession;
+        if (controlledCamera == null || Screen.width <= 0 || Screen.height <= 0 ||
+            (lastViewportWidth == Screen.width && lastViewportHeight == Screen.height &&
+             lastViewportOnline == online)) return;
+        lastViewportWidth = Screen.width;
+        lastViewportHeight = Screen.height;
+        lastViewportOnline = online;
+        if (!online)
+        {
+            controlledCamera.rect = new Rect(0f, 0f, 1f, 1f);
+            return;
+        }
+        float windowAspect = Screen.width / (float)Screen.height;
+        if (windowAspect > FixedGameAspect)
+        {
+            float width = FixedGameAspect / windowAspect;
+            controlledCamera.rect = new Rect((1f - width) * 0.5f, 0f, width, 1f);
+        }
+        else
+        {
+            float height = windowAspect / FixedGameAspect;
+            controlledCamera.rect = new Rect(0f, (1f - height) * 0.5f, 1f, height);
+        }
     }
 
     public void MoveCamera()
@@ -881,6 +917,7 @@ public class CameraController : MonoBehaviour
         foreach (CardInteraction card in selectedCards)
         {
             Debug.Log($"カード {card.name} をめくる処理を実行");
+            card.EnsureVisibleForTable();
             card.FlipCard();
         }
     }

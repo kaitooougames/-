@@ -20,7 +20,9 @@ namespace KaitouOnline
         private readonly Dictionary<int, ActionCardChoice> hostChoices =
             new Dictionary<int, ActionCardChoice>();
         private KaitouOnlineSession session;
-        private bool revealStarted;
+        // boolだと前日の開示終了が遅れた端末で、翌日のSnapshotまで破棄してしまう。
+        // 開示済みかどうかは日ごとに管理する。
+        private int revealStartedDay = -1;
         public static string WaitingMessage { get; private set; } = "";
         public static string PriorityMessage { get; private set; } = "";
         private readonly Dictionary<int, int> securityDiceResults =
@@ -82,6 +84,62 @@ namespace KaitouOnline
             Debug.LogError("【オンライン進行停止】" + WaitingMessage);
         }
 
+        public static void RunCpuActionCardVisualTest()
+        {
+            if (!IsOnlineSession || Instance == null || Instance.session == null) return;
+            Instance.StartCoroutine(Instance.CpuActionCardVisualTest());
+        }
+
+        private System.Collections.IEnumerator CpuActionCardVisualTest()
+        {
+            List<CardInteraction> cpuCards = new List<CardInteraction>();
+            for (int networkSeat = session.ConfirmedHumanPlayers;
+                 networkSeat < session.RoomPlayerCount; networkSeat++)
+            {
+                int localIndex = LocalIndexForNetworkSeat(networkSeat);
+                CardInteraction card = GetSelectedCardAtLocalIndex(localIndex);
+                if (card == null)
+                {
+                    if (localIndex == 1)
+                        FindFirstObjectByType<Player2>(FindObjectsInactive.Include)?.SelectRandomCard();
+                    else if (localIndex == 2)
+                        FindFirstObjectByType<Player3>(FindObjectsInactive.Include)?.SelectRandomCard();
+                    else if (localIndex == 3)
+                        FindFirstObjectByType<Player4>(FindObjectsInactive.Include)?.SelectRandomCard();
+                    card = GetSelectedCardAtLocalIndex(localIndex);
+                }
+                if (card == null)
+                {
+                    Debug.LogError($"【CPU表示テストNG】P{networkSeat + 1}のカードを選べません。");
+                    continue;
+                }
+
+                card.EnsureVisibleForTable();
+                Vector3 tablePosition = localIndex == 1 ? new Vector3(0f, 0f, 1f) :
+                    localIndex == 2 ? new Vector3(-1f, 0f, 0f) :
+                    new Vector3(1f, 0f, 0f);
+                card.MoveTo(tablePosition, 2.5f);
+                cpuCards.Add(card);
+                Debug.Log($"【CPU表示テスト移動】P{networkSeat + 1} {card.name} → {tablePosition}");
+            }
+
+            yield return new WaitForSeconds(0.9f);
+            foreach (CardInteraction card in cpuCards)
+            {
+                if (card == null) continue;
+                card.CompleteCurrentMoveImmediately();
+                card.EnsureVisibleForTable();
+                card.FlipForVisualTest();
+                Renderer[] renderers = card.GetComponentsInChildren<Renderer>(true);
+                int enabledRenderers = 0;
+                foreach (Renderer renderer in renderers)
+                    if (renderer != null && renderer.enabled) enabledRenderers++;
+                Debug.Log($"【CPU表示テスト反転】{card.name} active={card.gameObject.activeInHierarchy} " +
+                          $"renderer={enabledRenderers}/{renderers.Length} " +
+                          $"scale={card.VisualScale} position={card.transform.position}");
+            }
+        }
+
         public static void BeginStateCheckpoint(int day, string checkpoint)
         {
             if (!IsOnlineSession || Instance == null) return;
@@ -135,7 +193,6 @@ namespace KaitouOnline
             if (!IsOnlineSession) return;
             EnsureInstance();
             Instance.hostChoices.Clear();
-            Instance.revealStarted = false;
             WaitingMessage = "";
             Debug.Log("<color=#70E8FF>【オンライン】次の日の行動選択待ちへ移行</color>");
         }
@@ -807,6 +864,14 @@ namespace KaitouOnline
                     Instance.ReceiveStateCheckpoint(checkpoint);
                     return;
                 }
+                if (request.action == "desync_report")
+                {
+                    StateCheckpoint report = Protocol.Parse<StateCheckpoint>(request.data);
+                    if (string.IsNullOrWhiteSpace(report.message))
+                        report.message = "行動カードの同期に失敗したため、接続を終了しました。";
+                    session.Send(MessageType.DesyncDetected, -1, Protocol.Json(report));
+                    return;
+                }
                 if (request.action == "appraiser_type_choice")
                 {
                     session.Send(MessageType.AppraiserTypeChoice, -1, request.data);
@@ -845,7 +910,8 @@ namespace KaitouOnline
                 ActionSelectionState state =
                     Protocol.Parse<ActionSelectionState>(envelope.payload);
                 if (state.choices == null || state.choices.Length == 0) return;
-                ApplyReadyChoices(state.day, state.revealAtServerTime, state.choices);
+                ApplyReadyChoices(state.day, state.revealAtServerTime, state.choices,
+                    state.inventory);
                 return;
             }
 
@@ -1057,10 +1123,22 @@ namespace KaitouOnline
                 if (first == null) first = value.Value;
                 else if (first != value.Value) matches = false;
             }
+            if (!matches)
+            {
+                var details = new List<string>();
+                foreach (KeyValuePair<int, string> value in values)
+                    details.Add($"端末P{value.Key + 1}=[{value.Value}]");
+                Debug.LogError("【行動手札同期差分】" + string.Join(" / ", details));
+            }
             StateCheckpoint result = checkpoint;
             result.success = matches;
+            string phaseName = checkpoint.checkpoint == "action_ready"
+                ? "行動カードの手札構成"
+                : checkpoint.checkpoint == "detective"
+                    ? "名探偵の処理結果"
+                    : "ゲーム状態";
             result.message = matches ? "" :
-                "名探偵の処理結果が端末間で一致しなかったため、接続を終了しました。";
+                phaseName + "が端末間で一致しなかったため、接続を終了しました。";
             session.Send(matches ? MessageType.StateCheckpointResult :
                 MessageType.DesyncDetected, -1, Protocol.Json(result));
         }
@@ -1127,15 +1205,17 @@ namespace KaitouOnline
             bool[] arrested = new bool[count];
             bool[] eliminated = new bool[count];
             bool[] criminalRecords = new bool[count];
+            bool[] penaltyPending = new bool[count];
             int[] prisonUntilDays = new int[count];
             for (int seat = 0; seat < count; seat++)
             {
-                ReadParticipantState(LocalIndexForNetworkSeat(seat),
+                int localIndex = LocalIndexForNetworkSeat(seat);
+                ReadParticipantState(localIndex,
                     out arrested[seat], out eliminated[seat]);
-                criminalRecords[seat] = ReadCriminalRecord(
-                    LocalIndexForNetworkSeat(seat));
+                criminalRecords[seat] = ReadCriminalRecord(localIndex);
+                penaltyPending[seat] = ReadPenaltyPending(localIndex);
                 prisonUntilDays[seat] = SpecialActionCardSystem.GetPrisonUntilDay(
-                    LocalIndexForNetworkSeat(seat));
+                    localIndex);
             }
 
             int[] localRewards = ArrestHandler.Instance != null
@@ -1150,6 +1230,7 @@ namespace KaitouOnline
                 arrested = arrested,
                 eliminated = eliminated,
                 criminalRecords = criminalRecords,
+                penaltyPending = penaltyPending,
                 prisonUntilDays = prisonUntilDays,
                 successfulCageSeats = networkRewards,
                 penaltySeed = unchecked(session.GameSeed ^ (day * 486187739))
@@ -1167,6 +1248,10 @@ namespace KaitouOnline
                                   seat < state.eliminated.Length &&
                                   state.eliminated[seat];
                 WriteParticipantState(localIndex, state.arrested[seat], eliminated);
+                bool penaltyPending = state.penaltyPending != null &&
+                                      seat < state.penaltyPending.Length &&
+                                      state.penaltyPending[seat];
+                WritePenaltyPending(localIndex, penaltyPending);
                 if (state.criminalRecords != null &&
                     seat < state.criminalRecords.Length)
                     WriteCriminalRecord(localIndex, state.criminalRecords[seat]);
@@ -1285,6 +1370,29 @@ namespace KaitouOnline
             return Object.FindFirstObjectByType<Player4>()?.hasCriminalRecord ?? false;
         }
 
+        private static bool ReadPenaltyPending(int localIndex)
+        {
+            if (localIndex == 0)
+                return Object.FindFirstObjectByType<Player>()?.HasPendingArrestPenalty ?? false;
+            if (localIndex == 1)
+                return Object.FindFirstObjectByType<Player2>()?.HasPendingArrestPenalty ?? false;
+            if (localIndex == 2)
+                return Object.FindFirstObjectByType<Player3>()?.HasPendingArrestPenalty ?? false;
+            return Object.FindFirstObjectByType<Player4>()?.HasPendingArrestPenalty ?? false;
+        }
+
+        private static void WritePenaltyPending(int localIndex, bool value)
+        {
+            if (localIndex == 0)
+                Object.FindFirstObjectByType<Player>()?.ApplyOnlinePenaltyPending(value);
+            else if (localIndex == 1)
+                Object.FindFirstObjectByType<Player2>()?.ApplyOnlinePenaltyPending(value);
+            else if (localIndex == 2)
+                Object.FindFirstObjectByType<Player3>()?.ApplyOnlinePenaltyPending(value);
+            else
+                Object.FindFirstObjectByType<Player4>()?.ApplyOnlinePenaltyPending(value);
+        }
+
         private static void WriteCriminalRecord(int localIndex, bool value)
         {
             if (localIndex == 0)
@@ -1335,8 +1443,82 @@ namespace KaitouOnline
                     day = day,
                     revealAtServerTime = NetworkManager.Singleton != null
                         ? NetworkManager.Singleton.ServerTime.Time + 0.8 : 0d,
-                    choices = ordered
+                    choices = ordered,
+                    inventory = CaptureAuthoritativeActionInventory()
                 }));
+        }
+
+        private ActionCardInventoryEntry[] CaptureAuthoritativeActionInventory()
+        {
+            var result = new List<ActionCardInventoryEntry>();
+            for (int networkSeat = 0; networkSeat < session.RoomPlayerCount; networkSeat++)
+            {
+                int localIndex = LocalIndexForNetworkSeat(networkSeat);
+                List<CardInteraction> cards = GetActionCardsAtLocalIndex(localIndex);
+                var counts = new Dictionary<string, ActionCardInventoryEntry>();
+                if (cards != null)
+                {
+                    foreach (CardInteraction card in cards)
+                    {
+                        if (card == null) continue;
+                        string key = $"{(int)card.specialEffect}:" +
+                                     $"{(card.isExhibit ? 1 : 0)}" +
+                                     $"{(card.isPhantomThief ? 1 : 0)}" +
+                                     $"{(card.isCage ? 1 : 0)}";
+                        if (!counts.TryGetValue(key, out ActionCardInventoryEntry entry))
+                        {
+                            entry = new ActionCardInventoryEntry
+                            {
+                                seat = networkSeat,
+                                specialEffect = (int)card.specialEffect,
+                                isExhibit = card.isExhibit,
+                                isThief = card.isPhantomThief,
+                                isCage = card.isCage,
+                                count = 0
+                            };
+                        }
+                        entry.count++;
+                        counts[key] = entry;
+                    }
+                }
+                result.AddRange(counts.Values);
+            }
+            return result.ToArray();
+        }
+
+        private void ApplyAuthoritativeActionInventory(
+            ActionCardInventoryEntry[] networkInventory)
+        {
+            if (networkInventory == null) return;
+            var localInventory = new ActionCardInventoryEntry[networkInventory.Length];
+            for (int i = 0; i < networkInventory.Length; i++)
+            {
+                localInventory[i] = networkInventory[i];
+                localInventory[i].seat = LocalIndexForNetworkSeat(networkInventory[i].seat);
+            }
+            for (int localIndex = 0; localIndex < 4; localIndex++)
+            {
+                if (!IsConfiguredLocalSeat(localIndex)) continue;
+                SpecialActionCardSystem.SynchronizeOnlineHand(localIndex,
+                    localInventory, HandManager.Instance);
+            }
+        }
+
+        private static List<CardInteraction> GetActionCardsAtLocalIndex(int localIndex)
+        {
+            if (localIndex == 0)
+                return Object.FindFirstObjectByType<Player>(
+                    FindObjectsInactive.Include)?.playerCards;
+            if (localIndex == 1)
+                return Object.FindFirstObjectByType<Player2>(
+                    FindObjectsInactive.Include)?.player2Cards;
+            if (localIndex == 2)
+                return Object.FindFirstObjectByType<Player3>(
+                    FindObjectsInactive.Include)?.player3Cards;
+            if (localIndex == 3)
+                return Object.FindFirstObjectByType<Player4>(
+                    FindObjectsInactive.Include)?.player4Cards;
+            return null;
         }
 
         private void EnsureHostCpuChoices(int day)
@@ -1367,6 +1549,12 @@ namespace KaitouOnline
                         ? selected.RandomDeclaredNumber() : 0;
                     cpu?.SetCpuDeclaredNumber(declaredNumber);
                 }
+                if (selected == null && IsCpuActionRequired(localIndex))
+                {
+                    AbortForActionMismatch(day,
+                        $"CPUのP{networkSeat + 1}が行動可能なのにカードを選べませんでした。");
+                    return;
+                }
                 hostChoices[networkSeat] = selected != null
                     ? Describe(selected, networkSeat, declaredNumber)
                     : new ActionCardChoice { day = day, seat = networkSeat };
@@ -1375,22 +1563,48 @@ namespace KaitouOnline
             }
         }
 
-        private void ApplyReadyChoices(
-            int snapshotDay, double revealAtServerTime, ActionCardChoice[] choices)
+        private static bool IsCpuActionRequired(int localIndex)
         {
-            if (revealStarted) return;
+            if (SpecialActionCardSystem.CannotActToday(localIndex)) return false;
+            if (localIndex == 2)
+            {
+                Player3 player = Object.FindFirstObjectByType<Player3>();
+                return player != null && player.gameObject.activeInHierarchy &&
+                       !player.isEliminated;
+            }
+            if (localIndex == 3)
+            {
+                Player4 player = Object.FindFirstObjectByType<Player4>();
+                return player != null && player.gameObject.activeInHierarchy &&
+                       !player.isEliminated;
+            }
+            return false;
+        }
+
+        private void ApplyReadyChoices(
+            int snapshotDay, double revealAtServerTime, ActionCardChoice[] choices,
+            ActionCardInventoryEntry[] inventory)
+        {
+            if (revealStartedDay == snapshotDay) return;
             int currentDay = HandManager.Instance != null
                 ? HandManager.Instance.CurrentDay : 1;
             if (snapshotDay != currentDay || choices == null ||
-                choices.Length == 0)
+                choices.Length != session.RoomPlayerCount)
             {
-                Debug.LogWarning($"【オンライン開示破棄】受信:{snapshotDay}日目 / 現在:{currentDay}日目");
+                Debug.LogWarning($"【オンライン開示破棄】受信:{snapshotDay}日目 / " +
+                                 $"現在:{currentDay}日目 / 選択数:{choices?.Length ?? 0} / " +
+                                 $"必要数:{session.RoomPlayerCount}");
                 return;
             }
+            ApplyAuthoritativeActionInventory(inventory);
+            var receivedSeats = new HashSet<int>();
             foreach (ActionCardChoice choice in choices)
-                if (choice.day != snapshotDay)
+                if (choice.day != snapshotDay || choice.seat < 0 ||
+                    choice.seat >= session.RoomPlayerCount ||
+                    !receivedSeats.Add(choice.seat))
                 {
-                    Debug.LogWarning("【オンライン開示破棄】選択データ内の日番号が一致しません。");
+                    AbortForActionMismatch(snapshotDay,
+                        "4人分の行動選択データに欠落または重複がありました。");
                     return;
                 }
             foreach (ActionCardChoice choice in choices)
@@ -1438,25 +1652,178 @@ namespace KaitouOnline
                 }
             }
 
+            // 選択スナップショットを受け取っただけでは進めない。
+            // 全席で対応する実カードが確定していることを検査し、1枚でも欠けた状態で
+            // 競合・檻・宝フェーズへ入ることを防ぐ。
+            if (!ValidateAppliedChoices(snapshotDay, choices, out string mismatch))
+            {
+                AbortForActionMismatch(snapshotDay, mismatch);
+                return;
+            }
+
             // 両者の選択が揃った通知を共通の起点にする。
             // 相手カードの伏せ移動開始直後、ローカルと同じカメラ・開示シーケンスへ入る。
-            revealStarted = true;
+            revealStartedDay = snapshotDay;
             WaitingMessage = "";
+            BeginStateCheckpoint(snapshotDay, "action_ready");
             StartCoroutine(BeginSynchronizedReveal(snapshotDay, revealAtServerTime));
+        }
+
+        private bool ValidateAppliedChoices(int day, ActionCardChoice[] choices,
+            out string mismatch)
+        {
+            foreach (ActionCardChoice choice in choices)
+            {
+                int localIndex = LocalIndexForNetworkSeat(choice.seat);
+                CardInteraction selected = GetSelectedCardAtLocalIndex(localIndex);
+                bool isPass = choice.specialEffect == 0 && !choice.isExhibit &&
+                              !choice.isThief && !choice.isCage;
+                if (isPass)
+                {
+                    if (selected != null)
+                    {
+                        mismatch = $"{day}日目 P{choice.seat + 1}は休みですが、" +
+                                   $"{selected.name}が選択状態です。";
+                        return false;
+                    }
+                    Debug.Log($"【4人同期検査】{day}日目 P{choice.seat + 1}：休み");
+                    continue;
+                }
+
+                if (selected == null || (int)selected.specialEffect != choice.specialEffect ||
+                    selected.isExhibit != choice.isExhibit ||
+                    selected.isPhantomThief != choice.isThief ||
+                    selected.isCage != choice.isCage ||
+                    (choice.isThief && selected.SelectedNumber != choice.declaredNumber))
+                {
+                    mismatch = $"{day}日目 P{choice.seat + 1}の行動カードを" +
+                               "この端末の手札へ正しく反映できませんでした。" +
+                               $" 期待=特殊:{choice.specialEffect}/展示:{choice.isExhibit}/" +
+                               $"怪盗:{choice.isThief}/檻:{choice.isCage}/宣言:{choice.declaredNumber}" +
+                               (selected == null ? " 実際=カードなし" :
+                                $" 実際={selected.name}/特殊:{(int)selected.specialEffect}/" +
+                                $"展示:{selected.isExhibit}/怪盗:{selected.isPhantomThief}/" +
+                                $"檻:{selected.isCage}/宣言:{selected.SelectedNumber}");
+                    return false;
+                }
+                Debug.Log($"<color=#70E8FF>【4人同期検査OK】{day}日目 " +
+                          $"P{choice.seat + 1}：{CardLabel(choice)} " +
+                          $"宣言:{choice.declaredNumber}</color>");
+            }
+            mismatch = "";
+            return true;
+        }
+
+        private static CardInteraction GetSelectedCardAtLocalIndex(int localIndex)
+        {
+            if (localIndex == 0)
+                return Object.FindFirstObjectByType<Player>()?.SelectedCard;
+            if (localIndex == 1)
+                return Object.FindFirstObjectByType<Player2>()?.SelectedCard;
+            if (localIndex == 2)
+                return Object.FindFirstObjectByType<Player3>()?.SelectedCard;
+            if (localIndex == 3)
+                return Object.FindFirstObjectByType<Player4>()?.SelectedCard;
+            return null;
+        }
+
+        private void AbortForActionMismatch(int day, string message)
+        {
+            string fullMessage = string.IsNullOrWhiteSpace(message)
+                ? "行動カードの同期に失敗したため、接続を終了しました。"
+                : message + " 接続を終了します。";
+            Debug.LogError("【4人同期検査NG】" + fullMessage);
+            StateCheckpoint report = new StateCheckpoint
+            {
+                day = day,
+                checkpoint = "action_reveal",
+                actorSeat = session.LocalSeat,
+                success = false,
+                message = fullMessage
+            };
+            if (session.IsHost)
+                session.Send(MessageType.DesyncDetected, -1, Protocol.Json(report));
+            else
+                session.SendAction(new ActionRequest
+                {
+                    action = "desync_report",
+                    actorSeat = session.LocalSeat,
+                    data = Protocol.Json(report)
+                });
         }
 
         private System.Collections.IEnumerator BeginSynchronizedReveal(
             int day, double revealAtServerTime)
         {
+            // 全端末の4席分の行動手札が一致してからだけ開示する。
+            // 不一致のまま進めると競合・檻・展示数が連鎖的に壊れる。
+            while (IsActive && IsWaitingForStateCheckpoint(day, "action_ready"))
+                yield return null;
+            if (!IsActive) yield break;
+
             NetworkManager manager = NetworkManager.Singleton;
             if (manager != null && revealAtServerTime > 0d)
                 while (manager.IsListening && manager.ServerTime.Time < revealAtServerTime)
                     yield return null;
             CameraController cameraController =
                 Camera.main != null ? Camera.main.GetComponent<CameraController>() : null;
+            // ローカル版と同じく、カメラが中央へ寄り始めるこの瞬間に
+            // 4席の伏せカードを一斉に卓上へ移動させる。
+            MoveAllSelectedCardsToTable(day);
+            StartCoroutine(EnsureSelectedCardsReachedTable(day));
             cameraController?.MoveCamera();
             Debug.Log($"<color=#70E8FF>【オンライン時刻同期開示】{day}日目 " +
                       $"serverTime={revealAtServerTime:F3}</color>");
+        }
+
+        private void MoveAllSelectedCardsToTable(int day)
+        {
+            Vector3[] positions =
+            {
+                new Vector3(0f, 0f, -1f),
+                new Vector3(0f, 0f, 1f),
+                new Vector3(-1f, 0f, 0f),
+                new Vector3(1f, 0f, 0f)
+            };
+            for (int localIndex = 0; localIndex < positions.Length; localIndex++)
+            {
+                // 自分のカードは従来どおり選択時のMoveToCenterに任せる。
+                if (localIndex == 0) continue;
+                if (!IsConfiguredLocalSeat(localIndex)) continue;
+                CardInteraction selected = GetSelectedCardAtLocalIndex(localIndex);
+                if (selected == null) continue;
+                selected.EnsureVisibleForTable();
+                selected.MoveTo(positions[localIndex], 2.5f);
+                Debug.Log($"<color=#70E8FF>【オンライン一斉卓上移動】{day}日目 " +
+                          $"local P{localIndex + 1}：{selected.name}</color>");
+            }
+        }
+
+        private static bool IsConfiguredLocalSeat(int localIndex)
+        {
+            HandManager manager = HandManager.Instance;
+            if (manager == null) return false;
+            if (manager.ActionPlayerCount == 3)
+                return localIndex == 0 || localIndex == 2 || localIndex == 3;
+            return localIndex >= 0 && localIndex < manager.ActionPlayerCount;
+        }
+
+        private System.Collections.IEnumerator EnsureSelectedCardsReachedTable(int day)
+        {
+            // カメラ移動と一緒にスライドを見せ、その終盤で必ず目標座標へ確定する。
+            yield return new WaitForSeconds(0.8f);
+            for (int localIndex = 0; localIndex < 4; localIndex++)
+            {
+                if (localIndex == 0) continue;
+                if (!IsConfiguredLocalSeat(localIndex)) continue;
+                CardInteraction selected = GetSelectedCardAtLocalIndex(localIndex);
+                if (selected == null) continue;
+                selected.EnsureVisibleForTable();
+                selected.CompleteCurrentMoveImmediately();
+                Debug.Log($"<color=#70E8FF>【オンライン卓上到着確認】{day}日目 " +
+                          $"local P{localIndex + 1}：{selected.name} " +
+                          $"座標:{selected.transform.position} Scale:{selected.VisualScale}</color>");
+            }
         }
 
         private static ActionCardChoice Describe(CardInteraction card, int seat, int number) =>

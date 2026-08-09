@@ -13,6 +13,12 @@ public class Player2 : MonoBehaviour
 
     public bool HasBeenArrested { get; set; } // プレイヤーが逮捕されたかどうか
     private bool hasAppliedPenalty = false;  // ペナルティが適用されたかどうかをチェックするフラグ
+    public bool HasPendingArrestPenalty => hasAppliedPenalty;
+
+    public void ApplyOnlinePenaltyPending(bool value)
+    {
+        hasAppliedPenalty = value;
+    }
     public GameObject arrestPenaltyCardPrefab;  // ペナルティカードのプレハブをInspectorで設定
     private bool isFirstOffense = false; // 初犯フラグ
 
@@ -58,11 +64,12 @@ public class Player2 : MonoBehaviour
         // ランダムに選択
         int randomIndex = Random.Range(0, selectableCards.Count);
         selectedCard = selectableCards[randomIndex];
-        selectedCard.SetVisualVisible(true);
+        selectedCard.EnsureVisibleForTable();
         SpecialActionCardSystem.NotifySelected(1, selectedCard);
 
         Vector3 player2Position = new Vector3(0, 0, 1);
-        selectedCard.MoveTo(player2Position, 2.5f);
+        if (!KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            selectedCard.MoveTo(player2Position, 2.5f);
     }
 
     public void RestoreAdvanceNotice(CardInteraction card)
@@ -81,17 +88,20 @@ public class Player2 : MonoBehaviour
             card.isPhantomThief == thief &&
             card.isCage == cage);
         if (match == null)
+            match = SpecialActionCardSystem.EnsureOnlineCardInHand(1, specialEffect,
+                exhibit, thief, cage, HandManager.Instance);
+        if (match == null)
         {
             Debug.LogError($"【オンライン】Player2の対応カードがありません。特殊:{specialEffect}");
             return;
         }
         selectedCard = match;
-        match.SetVisualVisible(true);
+        match.EnsureVisibleForTable();
         SelectedNumber = thief ? declaredNumber : 0;
         match.SelectedNumber = SelectedNumber;
         SpecialActionCardSystem.NotifySelected(1, match);
         // ローカルCPUのPlayer2と同じ伏せ移動速度・軌道を使う。
-        match.MoveTo(new Vector3(0f, 0f, 1f), 2.5f);
+        Debug.Log($"【オンライン卓上待機】local P2：{match.name} 宣言:{SelectedNumber}");
     }
 
     public void SelectOnlinePass()
@@ -320,10 +330,7 @@ public class Player2 : MonoBehaviour
         foreach (var card in player2Cards)
         {
             if (SpecialActionCardSystem.IsAdvanceNoticePendingCard(1, card)) continue;
-            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
-                card.MoveToHidden(new Vector3(0, 2, 2.5f), 2.5f);
-            else
-                card.MoveTo(new Vector3(0, 2, 2.5f), 2.5f);
+            card.MoveTo(new Vector3(0f, 2f, 2.5f), 2.5f);
         }
         if (!keepAdvanceNotice && activeStealEffect != null)
         {

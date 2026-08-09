@@ -62,6 +62,13 @@ public class HandManager : MonoBehaviour
     private void Awake()
     {
         Instance = this;
+        // オンラインではシーンに保存された人数を一瞬でも使わない。
+        // 2人の保存値で初期化されると追加怪盗が生成され、参加側・CPU側の
+        // 行動手札がホストと食い違うため、Awakeの時点から部屋人数を採用する。
+        if (KaitouOnline.KaitouOnlineSession.Instance != null &&
+            KaitouOnline.KaitouOnlineSession.Instance.HasStartedOnlineGame)
+            actionPlayerCount = Mathf.Clamp(
+                KaitouOnline.KaitouOnlineSession.Instance.RoomPlayerCount, 2, 4);
         // ゲーム開始時と次ターンの選択待ちは、行動カードを開いておく。
         actionHandVisible = true;
         SpecialActionCardSystem.ResetSession();
@@ -69,6 +76,10 @@ public class HandManager : MonoBehaviour
 
     void Start()
     {
+        if (KaitouOnline.KaitouOnlineSession.Instance != null &&
+            KaitouOnline.KaitouOnlineSession.Instance.HasStartedOnlineGame)
+            actionPlayerCount = Mathf.Clamp(
+                KaitouOnline.KaitouOnlineSession.Instance.RoomPlayerCount, 2, 4);
         ApplyPlayerCount(actionPlayerCount);
         SpecialActionCardSystem.DealInitialCards(this);
         SetInitialPositions(); // 初期位置を設定
@@ -140,7 +151,10 @@ public class HandManager : MonoBehaviour
             {
                 card.gameObject.SetActive(active);
                 if (active && KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
-                    card.SetVisualVisible(false);
+                {
+                    card.EnsureVisibleForTable();
+                    card.MoveToImmediate(new Vector3(0f, 2f, 2.5f));
+                }
             }
     }
 
@@ -154,7 +168,10 @@ public class HandManager : MonoBehaviour
             {
                 card.gameObject.SetActive(active);
                 if (active && KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
-                    card.SetVisualVisible(false);
+                {
+                    card.EnsureVisibleForTable();
+                    card.MoveToImmediate(new Vector3(-5f, 2f, 0f));
+                }
             }
     }
 
@@ -168,7 +185,10 @@ public class HandManager : MonoBehaviour
             {
                 card.gameObject.SetActive(active);
                 if (active && KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
-                    card.SetVisualVisible(false);
+                {
+                    card.EnsureVisibleForTable();
+                    card.MoveToImmediate(new Vector3(5f, 2f, 0f));
+                }
             }
     }
 
@@ -371,6 +391,7 @@ public class HandManager : MonoBehaviour
         DrawPlayerCounts();
         DrawDayCounter();
         DrawAllSpecialCardsTestButton(style);
+        DrawCpuActionCardMoveTestButton(style);
         DrawHoneyTrapInspection(style);
     }
 
@@ -435,7 +456,7 @@ public class HandManager : MonoBehaviour
         Vector3 storage = victimActionSeat == 1 ? new Vector3(0f, 2f, 2.5f) :
             victimActionSeat == 2 ? new Vector3(-5f, 2f, 0f) : new Vector3(5f, 2f, 0f);
         foreach (CardInteraction card in visibleCards)
-            card.MoveToHidden(storage, 7f);
+            card.MoveTo(storage, 7f);
         yield return new WaitForSeconds(0.5f);
         honeyTrapInspectionMessage = "";
         KaitouOnline.KaitouOnlineGameBridge.NotifyHoneyTrapInspection(
@@ -502,6 +523,20 @@ public class HandManager : MonoBehaviour
                 SpecialActionCardSystem.GrantAllSpecialCardsToPlayerOne(this);
         }
         GUI.enabled = true;
+    }
+
+    private void DrawCpuActionCardMoveTestButton(GUIStyle style)
+    {
+        if (!KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession) return;
+        float width = 245f * uiScale;
+        float height = 44f * uiScale;
+        float firstButtonHeight = showAllSpecialCardsButton ? height + 8f * uiScale : 0f;
+        Rect rect = new Rect(
+            allSpecialCardsButtonOffset.x,
+            allSpecialCardsButtonOffset.y + firstButtonHeight,
+            width, height);
+        if (GUI.Button(rect, "テスト：CPU行動カード移動", style))
+            KaitouOnline.KaitouOnlineGameBridge.RunCpuActionCardVisualTest();
     }
 
     private void HandleActionHandScroll()
@@ -604,10 +639,15 @@ public class HandManager : MonoBehaviour
         for (int i = 0; i < activeIds.Count; i++)
         {
             int id = activeIds[i];
-            int actionCount = id == 0 ? (player1 != null && player1.playerCards != null ? player1.playerCards.Count : 0)
-                : id == 1 ? (player2 != null && player2.player2Cards != null ? player2.player2Cards.Count : 0)
-                : id == 2 ? (player3 != null && player3.player3Cards != null ? player3.player3Cards.Count : 0)
-                : (player4 != null && player4.player4Cards != null ? player4.player4Cards.Count : 0);
+            List<CardInteraction> actionCards = id == 0
+                ? player1?.playerCards
+                : id == 1 ? player2?.player2Cards
+                : id == 2 ? player3?.player3Cards
+                : player4?.player4Cards;
+            int normalActionCount = actionCards != null
+                ? actionCards.FindAll(card => card != null && !card.IsSpecialAction).Count : 0;
+            int specialActionCount = actionCards != null
+                ? actionCards.FindAll(card => card != null && card.IsSpecialAction).Count : 0;
             int treasureId = ToTreasurePlayerId(id);
             int treasureCount = treasureController != null ? treasureController.GetHandCount(treasureId) : 0;
             string prisonStatus = SpecialActionCardSystem.IsImprisoned(id) ? "  【監獄】" :
@@ -623,7 +663,8 @@ public class HandManager : MonoBehaviour
                 : $"P{networkSeat + 1}";
             GUI.Label(new Rect(startX + width * i, Screen.height + playerCountsOffset.y * uiScale,
                     width, 34f * uiScale),
-                $"{shownName}  行動:{actionCount}  宝:{treasureCount}{cageStatus}{prisonStatus}", style);
+                $"{shownName}  通常:{normalActionCount} 特殊:{specialActionCount}  " +
+                $"宝:{treasureCount}{cageStatus}{prisonStatus}", style);
         }
     }
 
@@ -688,8 +729,18 @@ public class HandManager : MonoBehaviour
             !SpecialActionCardSystem.IsImprisoned(0);
         cardSelected = false;
         activeSelectedCard = null;
+        // 従来はCameraControllerの遅い後処理までクリック再開を待っていたため、
+        // ゲスト側だけ途中の同期待ちに入ると2日目以降が操作不能になった。
+        // ターン番号を更新したこの地点で、自分の全手札を確実に次の選択状態へ戻す。
+        foreach (CardInteraction card in cards)
+        {
+            if (card == null ||
+                SpecialActionCardSystem.IsAdvanceNoticePendingCard(0, card)) continue;
+            card.ResetForNextActionSelection();
+        }
         // Start()の再実行による瞬間移動は行わず、現在位置から手札へ戻す。
         RefreshActionHandLayout();
+        RefreshPlayerOneCardAvailability();
         Debug.Log("2日目開始！");
     }
 

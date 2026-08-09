@@ -12,6 +12,12 @@ public class Player : MonoBehaviour
    
     public bool HasBeenArrested { get; set; } // プレイヤーが逮捕されたかどうか
     private bool hasAppliedPenalty = false;  // ペナルティが適用されたかどうかをチェックするフラグ
+    public bool HasPendingArrestPenalty => hasAppliedPenalty;
+
+    public void ApplyOnlinePenaltyPending(bool value)
+    {
+        hasAppliedPenalty = value;
+    }
     public GameObject arrestPenaltyCardPrefab;  // ペナルティカードのプレハブをInspectorで設定
     private bool isFirstOffense = false; // 初犯フラグ
     private GameObject penaltyCardObj;  // クラスのメンバ変数として宣言
@@ -37,7 +43,8 @@ public class Player : MonoBehaviour
         List<CardInteraction> selectableCards = new List<CardInteraction>(playerCards);
 
         SelectedCard = card;
-        SelectedNumber = selectedNumber; 
+        SelectedNumber = selectedNumber;
+        if (card != null) card.SelectedNumber = selectedNumber;
         Debug.Log($"Player が {card.name} を選択し、{selectedNumber} を宣言しました！");
 
         if (isFirstOffense)

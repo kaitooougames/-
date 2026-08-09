@@ -15,6 +15,7 @@ namespace KaitouOnline
 {
     public sealed class KaitouOnlineSession : MonoBehaviour
     {
+        private const string PlayerNamePreference = "KaitouTreasure.PlayerName";
         public static KaitouOnlineSession Instance { get; private set; }
         public event Action<string> StatusChanged;
         public event Action<string> JoinCodeChanged;
@@ -30,6 +31,8 @@ namespace KaitouOnline
         private int gameSeed;
         private bool onlineGameStarted;
         private readonly string[] playerNames = { "Player1", "Player2", "Player3", "Player4" };
+        private string preferredLocalPlayerName = "";
+        private bool localPlayerNameConfirmed;
         private bool fatalReturnStarted;
 
         public string JoinCode => joinCode;
@@ -49,6 +52,7 @@ namespace KaitouOnline
                                 NetworkManager.Singleton.IsListening;
         public int GameSeed => gameSeed;
         public bool HasStartedOnlineGame => onlineGameStarted;
+        public bool LocalPlayerNameConfirmed => localPlayerNameConfirmed;
         public string GetPlayerName(int seat)
         {
             if (seat < 0 || seat >= playerNames.Length) return $"Player{seat + 1}";
@@ -62,9 +66,13 @@ namespace KaitouOnline
             if (!IsOnline || LocalSeat < 0 || manager == null ||
                 (!manager.IsHost && !manager.IsConnectedClient)) return false;
             string normalized = NormalizePlayerName(value, LocalSeat);
+            preferredLocalPlayerName = normalized;
+            PlayerPrefs.SetString(PlayerNamePreference, normalized);
+            PlayerPrefs.Save();
             if (IsHost)
             {
                 playerNames[LocalSeat] = normalized;
+                localPlayerNameConfirmed = true;
                 Send(MessageType.PlayerNameUpdate, -1, Protocol.Json(
                     new OnlinePlayerName { seat = LocalSeat, value = normalized }));
                 BroadcastLobby();
@@ -89,6 +97,7 @@ namespace KaitouOnline
                 return;
             }
             Instance = this;
+            preferredLocalPlayerName = PlayerPrefs.GetString(PlayerNamePreference, "").Trim();
             transform.SetParent(null);
             DontDestroyOnLoad(gameObject);
             EnsureNetworkManager();
@@ -114,6 +123,7 @@ namespace KaitouOnline
             connecting = true;
             try
             {
+                ResetRoomPlayerNames();
                 confirmedHumanPlayers = 0;
                 participantsConfirmed = false;
                 cpuPlayers = 0;
@@ -147,6 +157,7 @@ namespace KaitouOnline
             connecting = true;
             try
             {
+                ResetRoomPlayerNames();
                 await SignInAsync();
                 NetworkManager manager = NetworkManager.Singleton;
                 UnityTransport transport = manager.GetComponent<UnityTransport>();
@@ -433,7 +444,8 @@ namespace KaitouOnline
                 new FastBufferWriter(json.Length * sizeof(char) + 8, Allocator.Temp);
             writer.WriteValueSafe(json);
             NetworkManager.Singleton.CustomMessagingManager.SendNamedMessage(
-                Protocol.MessageName, clientId, writer, NetworkDelivery.ReliableSequenced);
+                Protocol.MessageName, clientId, writer,
+                NetworkDelivery.ReliableFragmentedSequenced);
         }
 
         private void OnMessage(ulong senderId, FastBufferReader reader)
@@ -471,7 +483,12 @@ namespace KaitouOnline
             {
                 OnlinePlayerName update = Protocol.Parse<OnlinePlayerName>(envelope.payload);
                 if (update.seat >= 0 && update.seat < playerNames.Length)
+                {
                     playerNames[update.seat] = NormalizePlayerName(update.value, update.seat);
+                    if (update.seat == LocalSeat &&
+                        playerNames[update.seat] == PreferredNameForSeat(update.seat))
+                        localPlayerNameConfirmed = true;
+                }
             }
             else if (envelope.type == MessageType.StartGame)
             {
@@ -518,6 +535,22 @@ namespace KaitouOnline
             if (values == null) return;
             for (int seat = 0; seat < playerNames.Length && seat < values.Length; seat++)
                 playerNames[seat] = NormalizePlayerName(values[seat], seat);
+            int localSeat = LocalSeat;
+            if (localSeat >= 0 && localSeat < playerNames.Length &&
+                playerNames[localSeat] == PreferredNameForSeat(localSeat))
+                localPlayerNameConfirmed = true;
+        }
+
+        private string PreferredNameForSeat(int seat) =>
+            NormalizePlayerName(preferredLocalPlayerName, seat);
+
+        private void ResetRoomPlayerNames()
+        {
+            for (int seat = 0; seat < playerNames.Length; seat++)
+                playerNames[seat] = $"Player{seat + 1}";
+            preferredLocalPlayerName =
+                PlayerPrefs.GetString(PlayerNamePreference, preferredLocalPlayerName).Trim();
+            localPlayerNameConfirmed = false;
         }
 
         private static string NormalizePlayerName(string value, int seat)

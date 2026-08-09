@@ -119,6 +119,45 @@ public class CardInteraction : MonoBehaviour
 
     private ArrestEffect activeArrestEffect; // 現在の逮捕エフェクト
 
+    private static bool IsUsableScale(Vector3 scale) =>
+        Mathf.Abs(scale.x) > 0.0001f && Mathf.Abs(scale.y) > 0.0001f &&
+        Mathf.Abs(scale.z) > 0.0001f;
+
+    private void CaptureOriginalPoseIfNeeded()
+    {
+        if (!IsUsableScale(originalScale) && IsUsableScale(transform.localScale))
+            originalScale = transform.localScale;
+        if (!IsUsableScale(originalScale))
+        {
+            CardInteraction[] cards = FindObjectsByType<CardInteraction>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (CardInteraction card in cards)
+            {
+                if (card == null || card == this || !IsUsableScale(card.originalScale)) continue;
+                originalScale = card.originalScale;
+                break;
+            }
+        }
+        // 全カードが壊れた状態からでも、シーンの行動カード標準サイズへ復旧する。
+        if (!IsUsableScale(originalScale))
+            originalScale = new Vector3(0.064f, 1f, 0.088f);
+    }
+
+    public void EnsureVisibleForTable()
+    {
+        Transform parent = transform.parent;
+        if (parent != null && !parent.gameObject.activeSelf)
+            parent.gameObject.SetActive(true);
+        if (!gameObject.activeSelf) gameObject.SetActive(true);
+        enabled = true;
+        CaptureOriginalPoseIfNeeded();
+        transform.localScale = selectedHoverLocked
+            ? originalScale * SelectedThiefScale : originalScale;
+        SetVisualVisible(true);
+    }
+
+    public Vector3 VisualScale => transform.localScale;
+
     public void SetVisualVisible(bool visible)
     {
         if (visible && pendingPrivacyHide != null)
@@ -143,15 +182,10 @@ public class CardInteraction : MonoBehaviour
             return;
         }
 
-        if (!privacyHidden) return;
-        for (int i = 0; i < visualRenderers.Length; i++)
-        {
-            Renderer visualRenderer = visualRenderers[i];
-            if (visualRenderer == null) continue;
-            visualRenderer.enabled = visibilityBeforePrivacyHide != null &&
-                                     i < visibilityBeforePrivacyHide.Length &&
-                                     visibilityBeforePrivacyHide[i];
-        }
+        // 旧オンライン非表示処理がfalseを記録している場合でも、
+        // 表示要求では保存値を使わず全Rendererを必ず有効化する。
+        foreach (Renderer visualRenderer in visualRenderers)
+            if (visualRenderer != null) visualRenderer.enabled = true;
         privacyHidden = false;
     }
 
@@ -178,6 +212,11 @@ public class CardInteraction : MonoBehaviour
 
     private void Awake()
     {
+        // Awakeは全GameObjectでStartより先に完了する。
+        // HandManager.Startが相手カードを収納してもScaleを失わないよう、ここで必ず保存する。
+        originalPosition = transform.position;
+        originalRotation = transform.rotation;
+        originalScale = transform.localScale;
         visualRenderers = GetComponentsInChildren<Renderer>(true);
         clickAppearanceBlock = new MaterialPropertyBlock();
         RefreshClickAppearance();
@@ -367,6 +406,7 @@ public class CardInteraction : MonoBehaviour
 
     public void MoveTo(Vector3 newPosition, float speed = 5f) // デフォルト速度は5
     {
+        CaptureOriginalPoseIfNeeded();
         transform.localScale = selectedHoverLocked ? originalScale * SelectedThiefScale : originalScale;
         Debug.Log(gameObject.name + " is moving to " + newPosition);
         targetPosition = newPosition;
@@ -379,11 +419,19 @@ public class CardInteraction : MonoBehaviour
 
     public void MoveToImmediate(Vector3 newPosition)
     {
+        CaptureOriginalPoseIfNeeded();
         originalPosition = newPosition;
         targetPosition = newPosition;
         transform.position = newPosition;
         transform.rotation = originalRotation;
         transform.localScale = selectedHoverLocked ? originalScale * SelectedThiefScale : originalScale;
+        isMoving = false;
+    }
+
+    public void CompleteCurrentMoveImmediately()
+    {
+        transform.position = targetPosition;
+        transform.rotation = targetRotation;
         isMoving = false;
     }
 
@@ -425,7 +473,7 @@ public class CardInteraction : MonoBehaviour
         transform.rotation = rotation;
         originalPosition = position;
         originalRotation = rotation;
-        if (originalScale == Vector3.zero) originalScale = transform.localScale;
+        CaptureOriginalPoseIfNeeded();
         transform.localScale = originalScale;
         targetPosition = position;
         targetRotation = rotation;
@@ -450,6 +498,27 @@ public class CardInteraction : MonoBehaviour
     public void EnableClick()
     {
         isClickable = true;
+    }
+
+    public void ResetForNextActionSelection()
+    {
+        if (pendingPrivacyHide != null)
+        {
+            StopCoroutine(pendingPrivacyHide);
+            pendingPrivacyHide = null;
+        }
+        pointerDown = false;
+        draggingHand = false;
+        hasMoved = false;
+        numberSelected = false;
+        selectedStealNumber = 0;
+        selectedHoverLocked = false;
+        revealedOnTable = false;
+        earlyRevealed = false;
+        earlyRevealedDay = -1;
+        transform.localScale = originalScale;
+        SetVisualVisible(true);
+        EnableClick();
     }
 
 
@@ -477,6 +546,7 @@ public class CardInteraction : MonoBehaviour
         if (numberSelectionPanel) numberSelectionPanel.SetActive(false);
 
         selectedStealNumber = number;  // ✅ ここは怪盗カードだけが来るようになった
+        SelectedNumber = number;
         MoveToCenter(player.SelectedNumber);
 
         if (KaitouOnline.KaitouOnlineGameBridge.SubmitLocalAction(this, number))
@@ -500,6 +570,7 @@ public class CardInteraction : MonoBehaviour
 
     public void FlipCard()
     {
+        EnsureVisibleForTable();
         revealedOnTable = true;
         selectedHoverLocked = false;
         transform.localScale = originalScale;
@@ -539,6 +610,19 @@ public class CardInteraction : MonoBehaviour
             }
         }
 
+    }
+
+    // オンライン表示確認専用。通常の公開枚数やゲーム進行イベントには触れない。
+    public void FlipForVisualTest()
+    {
+        EnsureVisibleForTable();
+        revealedOnTable = true;
+        selectedHoverLocked = false;
+        transform.localScale = originalScale;
+        SetClickBrightness(1f);
+        targetRotation = Quaternion.Euler(transform.rotation.eulerAngles.x + 180f,
+            transform.rotation.eulerAngles.y + 180f, transform.rotation.eulerAngles.z);
+        isFlipping = true;
     }
 
     public void RevealBeforeAllCards(bool dimAfterReveal = false)

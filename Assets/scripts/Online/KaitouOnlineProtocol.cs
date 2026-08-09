@@ -103,6 +103,18 @@ namespace KaitouOnline
         public int day;
         public double revealAtServerTime;
         public ActionCardChoice[] choices;
+        public ActionCardInventoryEntry[] inventory;
+    }
+
+    [Serializable]
+    public struct ActionCardInventoryEntry
+    {
+        public int seat;
+        public int specialEffect;
+        public bool isExhibit;
+        public bool isThief;
+        public bool isCage;
+        public int count;
     }
 
     [Serializable]
@@ -135,6 +147,7 @@ namespace KaitouOnline
         public bool[] arrested;
         public bool[] eliminated;
         public bool[] criminalRecords;
+        public bool[] penaltyPending;
         public int[] prisonUntilDays;
         public int[] successfulCageSeats;
         public int penaltySeed;
@@ -195,7 +208,7 @@ namespace KaitouOnline
     {
         // オンライン進行規約。古いMacビルドとの混在を防ぐため、
         // フェーズ同期方式を変更したら必ず更新する。
-        public const int Version = 15;
+        public const int Version = 28;
         public const string MessageName = "KaitouOnlineEvent";
 
         public static string Json<T>(T value) => JsonUtility.ToJson(value);

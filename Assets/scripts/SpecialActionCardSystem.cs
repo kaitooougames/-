@@ -68,9 +68,32 @@ public static class SpecialActionCardSystem
         {
             List<CardInteraction> ownerCards = GetCards(seat);
             if (ownerCards == null) continue;
+
+            // 以前2人用として生成された追加怪盗が辞書リセット後もリストへ残った場合、
+            // 3・4人戦へ絶対に持ち込まない。名前は生成時に付けた専用接尾辞で判別する。
+            if (!enabled)
+            {
+                List<CardInteraction> staleBonusCards = ownerCards.FindAll(card =>
+                    card != null && card.name.EndsWith("_2人用追加"));
+                foreach (CardInteraction stale in staleBonusCards)
+                {
+                    ownerCards.Remove(stale);
+                    if (seat == 0) handManager.cards.Remove(stale);
+                    Object.Destroy(stale.gameObject);
+                }
+                twoPlayerBonusThieves.Remove(seat);
+                consecutiveCageCounts.Remove(seat);
+                cageSelectionRecordedDay.Remove(seat);
+                continue;
+            }
+
             if (!twoPlayerBonusThieves.TryGetValue(seat, out CardInteraction bonus) || bonus == null)
             {
-                if (!enabled) continue;
+                bonus = ownerCards.Find(card => card != null &&
+                    card.name.EndsWith("_2人用追加"));
+            }
+            if (bonus == null)
+            {
                 CardInteraction template = ownerCards.Find(card => card != null &&
                     card.isPhantomThief && !card.IsSpecialAction);
                 if (template == null) continue;
@@ -78,33 +101,24 @@ public static class SpecialActionCardSystem
                 bonus = clone.GetComponent<CardInteraction>();
                 bonus.name = template.name + "_2人用追加";
                 bonus.InitializeHandPose(template.transform.position, template.transform.rotation);
-                twoPlayerBonusThieves[seat] = bonus;
             }
+            twoPlayerBonusThieves[seat] = bonus;
 
-            if (enabled)
+            if (!ownerCards.Contains(bonus))
             {
-                if (!ownerCards.Contains(bonus))
-                {
-                    int thiefIndex = ownerCards.FindIndex(card => card != null &&
-                        card != bonus && card.isPhantomThief && !card.IsSpecialAction);
-                    ownerCards.Insert(thiefIndex >= 0 ? thiefIndex + 1 : ownerCards.Count, bonus);
-                }
-                if (seat == 0 && !handManager.cards.Contains(bonus))
-                {
-                    int thiefIndex = handManager.cards.FindIndex(card => card != null &&
-                        card != bonus && card.isPhantomThief && !card.IsSpecialAction);
-                    handManager.cards.Insert(
-                        thiefIndex >= 0 ? thiefIndex + 1 : handManager.cards.Count, bonus);
-                    bonus.SetHandManager(handManager);
-                }
-                bonus.gameObject.SetActive(true);
+                int thiefIndex = ownerCards.FindIndex(card => card != null &&
+                    card != bonus && card.isPhantomThief && !card.IsSpecialAction);
+                ownerCards.Insert(thiefIndex >= 0 ? thiefIndex + 1 : ownerCards.Count, bonus);
             }
-            else
+            if (seat == 0 && !handManager.cards.Contains(bonus))
             {
-                ownerCards.Remove(bonus);
-                if (seat == 0) handManager.cards.Remove(bonus);
-                bonus.gameObject.SetActive(false);
+                int thiefIndex = handManager.cards.FindIndex(card => card != null &&
+                    card != bonus && card.isPhantomThief && !card.IsSpecialAction);
+                handManager.cards.Insert(
+                    thiefIndex >= 0 ? thiefIndex + 1 : handManager.cards.Count, bonus);
+                bonus.SetHandManager(handManager);
             }
+            bonus.gameObject.SetActive(true);
         }
     }
 
@@ -112,6 +126,23 @@ public static class SpecialActionCardSystem
     {
         if (initialCardsDealt || handManager == null) return;
         initialCardsDealt = true;
+
+        // オンラインでは全端末が「自分をPlayer1」として盤面を並べ替えるため、
+        // local seat 0,1,2,3 の順に配ると、端末ごとにネットワーク上の配布順が変わる。
+        // 独壇場・番犬・予告状は1ゲーム1枚の制約を共有しているので、配布順が違うと
+        // CPUの手札内容まで不一致になり、選択カードを復元できない。必ず共通の
+        // network seat順で配布してから、各端末のlocal seatへ変換する。
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+        {
+            int playerCount = Mathf.Clamp(handManager.ActionPlayerCount, 2, 4);
+            for (int networkSeat = 0; networkSeat < playerCount; networkSeat++)
+            {
+                int localSeat = KaitouOnline.KaitouOnlineGameBridge.ToLocalSeat(networkSeat);
+                KaitouOnline.KaitouOnlineGameBridge.PrepareInitialSpecialRandom(localSeat);
+                GrantCardsToSeat(localSeat, 2, handManager);
+            }
+            return;
+        }
 
         KaitouOnline.KaitouOnlineGameBridge.PrepareInitialSpecialRandom(0);
         GrantCardsToSeat(0, 2, handManager);
@@ -323,12 +354,169 @@ public static class SpecialActionCardSystem
         List<string> values = new List<string>();
         foreach (CardInteraction card in cards)
         {
-            if (card == null || !card.IsSpecialAction) continue;
-            values.Add(((int)card.specialEffect).ToString());
+            if (card == null) continue;
+            // 特殊カードだけでなく通常の展示・怪盗・檻も含める。
+            // 逮捕ペナルティによる通常カード没収が片方だけずれた場合も、
+            // 次の開示前に検出して壊れた状態で進行させない。
+            values.Add($"{(int)card.specialEffect}:" +
+                       $"{(card.isExhibit ? 1 : 0)}" +
+                       $"{(card.isPhantomThief ? 1 : 0)}" +
+                       $"{(card.isCage ? 1 : 0)}");
         }
         values.Sort(System.StringComparer.Ordinal);
         return string.Join(",", values);
     }
+
+    public static CardInteraction EnsureOnlineCardInHand(int seat, int specialEffect,
+        bool isExhibit, bool isThief, bool isCage, HandManager handManager,
+        bool forceCreate = false)
+    {
+        List<CardInteraction> ownerCards = GetCards(seat);
+        if (ownerCards == null) return null;
+
+        CardInteraction existing = ownerCards.Find(card => card != null &&
+            (int)card.specialEffect == specialEffect &&
+            card.isExhibit == isExhibit && card.isPhantomThief == isThief &&
+            card.isCage == isCage);
+        if (existing != null && !forceCreate)
+        {
+            existing.gameObject.SetActive(true);
+            existing.SetVisualVisible(true);
+            return existing;
+        }
+
+        CardInteraction created = null;
+        if (specialEffect != 0 &&
+            TryGetTemplates(seat, ownerCards, out CardInteraction exhibitTemplate,
+                out CardInteraction thiefTemplate))
+        {
+            SpecialActionEffect effect = (SpecialActionEffect)specialEffect;
+            created = CreateCard(IsThiefEffect(effect) ? thiefTemplate : exhibitTemplate,
+                effect, seat);
+        }
+        else if (specialEffect == 0)
+        {
+            CardInteraction template = ownerCards.Find(card => card != null &&
+                !card.IsSpecialAction && card.isExhibit == isExhibit &&
+                card.isPhantomThief == isThief && card.isCage == isCage);
+            if (template == null)
+            {
+                CardInteraction[] allCards = Object.FindObjectsByType<CardInteraction>(
+                    FindObjectsInactive.Include, FindObjectsSortMode.None);
+                template = System.Array.Find(allCards, card => card != null &&
+                    !card.IsSpecialAction && card.isExhibit == isExhibit &&
+                    card.isPhantomThief == isThief && card.isCage == isCage);
+            }
+            CardInteraction poseSource = ownerCards.Find(card => card != null);
+            if (template != null && poseSource != null)
+            {
+                GameObject clone = Object.Instantiate(template.gameObject,
+                    poseSource.transform.parent);
+                created = clone.GetComponent<CardInteraction>();
+                created.specialEffect = SpecialActionEffect.None;
+                created.isExhibit = isExhibit;
+                created.isPhantomThief = isThief;
+                created.isCage = isCage;
+                created.InitializeHandPose(poseSource.transform.position,
+                    poseSource.HandPoseRotation);
+                clone.name = isExhibit ? "通常展示_同期復元" :
+                    isThief ? "通常怪盗_同期復元" : "通常檻_同期復元";
+                clone.SetActive(true);
+                created.SetVisualVisible(true);
+            }
+        }
+
+        if (created == null) return null;
+        ownerCards.Add(created);
+        if (seat == 0 && handManager != null)
+        {
+            handManager.cards.Add(created);
+            created.SetHandManager(handManager);
+            handManager.RefreshActionHandLayout(true);
+        }
+        Debug.LogWarning($"【オンライン手札復元】P{seat + 1}へ不足カードを復元：" +
+                         $"特殊:{specialEffect} 展示:{isExhibit} 怪盗:{isThief} 檻:{isCage}");
+        return created;
+    }
+
+    public static void SynchronizeOnlineHand(int seat,
+        KaitouOnline.ActionCardInventoryEntry[] inventory, HandManager handManager)
+    {
+        List<CardInteraction> ownerCards = GetCards(seat);
+        if (ownerCards == null || inventory == null) return;
+
+        var desired = new Dictionary<string, KaitouOnline.ActionCardInventoryEntry>();
+        foreach (KaitouOnline.ActionCardInventoryEntry entry in inventory)
+        {
+            if (entry.seat != seat) continue;
+            desired[InventoryKey(entry.specialEffect, entry.isExhibit,
+                entry.isThief, entry.isCage)] = entry;
+        }
+
+        var groups = new Dictionary<string, List<CardInteraction>>();
+        foreach (CardInteraction card in new List<CardInteraction>(ownerCards))
+        {
+            if (card == null)
+            {
+                ownerCards.Remove(card);
+                continue;
+            }
+            string key = InventoryKey((int)card.specialEffect, card.isExhibit,
+                card.isPhantomThief, card.isCage);
+            if (!groups.TryGetValue(key, out List<CardInteraction> cards))
+            {
+                cards = new List<CardInteraction>();
+                groups[key] = cards;
+            }
+            cards.Add(card);
+        }
+
+        CardInteraction selected = GetSelectedCard(seat);
+        foreach (KeyValuePair<string, List<CardInteraction>> group in groups)
+        {
+            int wanted = desired.TryGetValue(group.Key,
+                out KaitouOnline.ActionCardInventoryEntry entry) ? entry.count : 0;
+            while (group.Value.Count > wanted)
+            {
+                int removeIndex = group.Value.Count - 1;
+                if (group.Value[removeIndex] == selected && group.Value.Count > 1)
+                    removeIndex = 0;
+                CardInteraction extra = group.Value[removeIndex];
+                group.Value.RemoveAt(removeIndex);
+                ownerCards.Remove(extra);
+                if (seat == 0 && handManager != null) handManager.cards.Remove(extra);
+                if (extra != null) Object.Destroy(extra.gameObject);
+            }
+        }
+
+        foreach (KaitouOnline.ActionCardInventoryEntry entry in desired.Values)
+        {
+            string key = InventoryKey(entry.specialEffect, entry.isExhibit,
+                entry.isThief, entry.isCage);
+            int current = groups.TryGetValue(key, out List<CardInteraction> cards)
+                ? Mathf.Min(cards.Count, entry.count) : 0;
+            while (current < entry.count)
+            {
+                CardInteraction added = EnsureOnlineCardInHand(seat,
+                    entry.specialEffect, entry.isExhibit, entry.isThief,
+                    entry.isCage, handManager, true);
+                if (added == null) break;
+                current++;
+            }
+        }
+
+        if (seat == 0 && handManager != null)
+        {
+            handManager.RefreshActionHandLayout(true);
+            handManager.RefreshPlayerOneCardAvailability();
+        }
+        Debug.Log($"<color=#70E8FF>【オンライン手札同期】P{seat + 1} " +
+                  $"{BuildActionHandSignature(seat)}</color>");
+    }
+
+    private static string InventoryKey(int specialEffect, bool exhibit,
+        bool thief, bool cage) => $"{specialEffect}:" +
+        $"{(exhibit ? 1 : 0)}{(thief ? 1 : 0)}{(cage ? 1 : 0)}";
 
     public static bool IsImprisoned(int seat) =>
         imprisonedUntilEndOfDay.ContainsKey(seat);
@@ -678,6 +866,7 @@ public static class SpecialActionCardSystem
         }
         // 没収済みで非表示になった通常カードを複製元にしても、報酬カードは手札へ表示する。
         clone.SetActive(true);
+        card.SetVisualVisible(true);
         return card;
     }
 
