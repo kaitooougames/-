@@ -25,6 +25,19 @@
     </div>
     <script>
       var canvas = document.querySelector("#unity-canvas");
+      var unityContainer = document.querySelector("#unity-container");
+
+      function fitCanvasToSixteenNine() {
+        var bounds = unityContainer.getBoundingClientRect();
+        var width = bounds.width;
+        var height = width * 9 / 16;
+        if (height > bounds.height) {
+          height = bounds.height;
+          width = height * 16 / 9;
+        }
+        canvas.style.width = Math.floor(width) + "px";
+        canvas.style.height = Math.floor(height) + "px";
+      }
 
       // Shows a temporary message banner/ribbon for a few seconds, or
       // a permanent error message on top of the canvas if type=='error'.
@@ -90,6 +103,11 @@
         document.getElementsByTagName('head')[0].appendChild(meta);
         document.querySelector("#unity-container").className = "unity-mobile";
         canvas.className = "unity-mobile";
+        fitCanvasToSixteenNine();
+        window.addEventListener("resize", fitCanvasToSixteenNine);
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener("resize", fitCanvasToSixteenNine);
+        }
 
         // To lower canvas resolution on mobile devices to gain some
         // performance, uncomment the following line:
@@ -99,7 +117,7 @@
       } else {
         // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
         canvas.style.width = "960px";
-        canvas.style.height = "600px";
+        canvas.style.height = "540px";
       }
 
       document.querySelector("#unity-loading-bar").style.display = "block";
