@@ -694,6 +694,11 @@ public class HandManager : MonoBehaviour
         selectedCard.LockSelectedThiefScale();
         Debug.Log("カード選択: " + selectedCard.name);
 
+        // 選択確定後は、選んだ1枚だけを卓上へ残して手札を収納する。
+        // actionHandVisibleもfalseにすることで、直後にオンライン手札同期が入っても
+        // 残りのカードが開いた位置へ戻されないようにする。
+        SetActionHandVisible(false);
+
         // **怪盗カードでなければカメラを移動**
         if (!selectedCard.isPhantomThief &&
             !KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
@@ -701,18 +706,6 @@ public class HandManager : MonoBehaviour
             Camera.main.GetComponent<CameraController>().MoveCamera();
         }
 
-
-        // **他のカードを初期位置に戻す**
-        foreach (var card in cards)
-        {
-            if (card != selectedCard)
-            {
-                Debug.Log(card.name + " を初期位置に戻す");
-                card.MoveTo(new Vector3(0, 3, -4)); // 初期位置に戻す
-                card.DisableClick(); // クリックを無効化
-
-            }
-        }
 
     }
 

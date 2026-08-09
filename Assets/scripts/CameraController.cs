@@ -16,6 +16,8 @@ public class CameraController : MonoBehaviour
     public SecurityDice securityDice; // Unity Inspector で設定
     private List<Player> players; // プレイヤーリスト
     private bool isFlipping = false;
+    private int preparedActionRevealDay = -1;
+    private int flippedActionRevealDay = -1;
     public CardInteraction cardInteraction;
     public ArrestHandler arrestHandler;
     public HandManager handManager;
@@ -108,6 +110,8 @@ public class CameraController : MonoBehaviour
 
     public void MoveCamera()
     {
+        PrepareSynchronizedActionReveal(
+            handManager != null ? handManager.CurrentDay : -1);
         if (isCameraMoving)
         {
             Debug.Log("MoveCamera() が呼ばれたが、カメラ移動中のため無視: " + Time.frameCount);
@@ -146,6 +150,15 @@ public class CameraController : MonoBehaviour
         TriggerSecurityDice();
 
         isCameraMoving = false;
+    }
+
+    public void PrepareSynchronizedActionReveal(int day)
+    {
+        if (day <= 0 || preparedActionRevealDay == day) return;
+        preparedActionRevealDay = day;
+        // 前日の特殊効果・途中終了で残ったガードは、新しい日の公開を止めてはいけない。
+        isFlipping = false;
+        Debug.Log($"<color=#70E8FF>【行動公開準備】{day}日目の反転ガードを初期化</color>");
     }
 
     private IEnumerator ResolveDetectivesBeforeReveal()
@@ -884,13 +897,16 @@ public class CameraController : MonoBehaviour
 
     public void FlipAllCards()
     {
-        if (isFlipping)
+        int day = handManager != null ? handManager.CurrentDay : -1;
+        if (isFlipping && flippedActionRevealDay == day)
         {
-            Debug.Log("FlipAllCards() がすでに実行中のためキャンセル: " + Time.frameCount);
-            return; // すでに実行中なら処理を中断
+            Debug.Log($"FlipAllCards() は{day}日目に実行済みのため重複を無視: " +
+                      Time.frameCount);
+            return;
         }
 
         isFlipping = true;
+        flippedActionRevealDay = day;
        
         Debug.Log("FlipAllCards() が呼ばれた" + Time.frameCount);
         var selectedCards = new List<CardInteraction>();

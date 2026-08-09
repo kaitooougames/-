@@ -1767,6 +1767,7 @@ namespace KaitouOnline
                     yield return null;
             CameraController cameraController =
                 Camera.main != null ? Camera.main.GetComponent<CameraController>() : null;
+            cameraController?.PrepareSynchronizedActionReveal(day);
             // ローカル版と同じく、カメラが中央へ寄り始めるこの瞬間に
             // 4席の伏せカードを一斉に卓上へ移動させる。
             MoveAllSelectedCardsToTable(day);

@@ -330,6 +330,7 @@ public class Player2 : MonoBehaviour
         foreach (var card in player2Cards)
         {
             if (SpecialActionCardSystem.IsAdvanceNoticePendingCard(1, card)) continue;
+            card.ResetForNextActionSelection();
             card.MoveTo(new Vector3(0f, 2f, 2.5f), 2.5f);
         }
         if (!keepAdvanceNotice && activeStealEffect != null)
