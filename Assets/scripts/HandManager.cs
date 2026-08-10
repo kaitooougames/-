@@ -399,7 +399,6 @@ public class HandManager : MonoBehaviour
         DrawPlayerCounts();
         DrawDayCounter();
         DrawAllSpecialCardsTestButton(style);
-        DrawCpuActionCardMoveTestButton(style);
         DrawHoneyTrapInspection(style);
     }
 
@@ -531,20 +530,6 @@ public class HandManager : MonoBehaviour
                 SpecialActionCardSystem.GrantAllSpecialCardsToPlayerOne(this);
         }
         GUI.enabled = true;
-    }
-
-    private void DrawCpuActionCardMoveTestButton(GUIStyle style)
-    {
-        if (!KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession) return;
-        float width = 245f * uiScale;
-        float height = 44f * uiScale;
-        float firstButtonHeight = showAllSpecialCardsButton ? height + 8f * uiScale : 0f;
-        Rect rect = new Rect(
-            allSpecialCardsButtonOffset.x,
-            allSpecialCardsButtonOffset.y + firstButtonHeight,
-            width, height);
-        if (GUI.Button(rect, "テスト：CPU行動カード移動", style))
-            KaitouOnline.KaitouOnlineGameBridge.RunCpuActionCardVisualTest();
     }
 
     private void HandleActionHandScroll()

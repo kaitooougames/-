@@ -84,62 +84,6 @@ namespace KaitouOnline
             Debug.LogError("【オンライン進行停止】" + WaitingMessage);
         }
 
-        public static void RunCpuActionCardVisualTest()
-        {
-            if (!IsOnlineSession || Instance == null || Instance.session == null) return;
-            Instance.StartCoroutine(Instance.CpuActionCardVisualTest());
-        }
-
-        private System.Collections.IEnumerator CpuActionCardVisualTest()
-        {
-            List<CardInteraction> cpuCards = new List<CardInteraction>();
-            for (int networkSeat = session.ConfirmedHumanPlayers;
-                 networkSeat < session.RoomPlayerCount; networkSeat++)
-            {
-                int localIndex = LocalIndexForNetworkSeat(networkSeat);
-                CardInteraction card = GetSelectedCardAtLocalIndex(localIndex);
-                if (card == null)
-                {
-                    if (localIndex == 1)
-                        FindFirstObjectByType<Player2>(FindObjectsInactive.Include)?.SelectRandomCard();
-                    else if (localIndex == 2)
-                        FindFirstObjectByType<Player3>(FindObjectsInactive.Include)?.SelectRandomCard();
-                    else if (localIndex == 3)
-                        FindFirstObjectByType<Player4>(FindObjectsInactive.Include)?.SelectRandomCard();
-                    card = GetSelectedCardAtLocalIndex(localIndex);
-                }
-                if (card == null)
-                {
-                    Debug.LogError($"【CPU表示テストNG】P{networkSeat + 1}のカードを選べません。");
-                    continue;
-                }
-
-                card.EnsureVisibleForTable();
-                Vector3 tablePosition = localIndex == 1 ? new Vector3(0f, 0f, 1f) :
-                    localIndex == 2 ? new Vector3(-1f, 0f, 0f) :
-                    new Vector3(1f, 0f, 0f);
-                card.MoveTo(tablePosition, 2.5f);
-                cpuCards.Add(card);
-                Debug.Log($"【CPU表示テスト移動】P{networkSeat + 1} {card.name} → {tablePosition}");
-            }
-
-            yield return new WaitForSeconds(0.9f);
-            foreach (CardInteraction card in cpuCards)
-            {
-                if (card == null) continue;
-                card.CompleteCurrentMoveImmediately();
-                card.EnsureVisibleForTable();
-                card.FlipForVisualTest();
-                Renderer[] renderers = card.GetComponentsInChildren<Renderer>(true);
-                int enabledRenderers = 0;
-                foreach (Renderer renderer in renderers)
-                    if (renderer != null && renderer.enabled) enabledRenderers++;
-                Debug.Log($"【CPU表示テスト反転】{card.name} active={card.gameObject.activeInHierarchy} " +
-                          $"renderer={enabledRenderers}/{renderers.Length} " +
-                          $"scale={card.VisualScale} position={card.transform.position}");
-            }
-        }
-
         public static void BeginStateCheckpoint(int day, string checkpoint)
         {
             if (!IsOnlineSession || Instance == null) return;
@@ -1816,6 +1760,11 @@ namespace KaitouOnline
                 if (selected == null) continue;
                 selected.EnsureVisibleForTable();
                 selected.DisableClick(false);
+                // 予告状は1日目に表向きで卓上へ残る。実行日の再同期でも
+                // MoveToによって元の裏向き角度へ戻さず、その姿勢を維持する。
+                if (SpecialActionCardSystem.IsAdvanceNoticePendingCard(localIndex, selected) &&
+                    SpecialActionCardSystem.IsAdvanceNoticeActiveToday(localIndex))
+                    continue;
                 if (localIndex == 0) continue;
                 selected.MoveTo(positions[localIndex], 2.5f);
                 Debug.Log($"<color=#70E8FF>【オンライン一斉卓上移動】{day}日目 " +
@@ -1843,6 +1792,9 @@ namespace KaitouOnline
                 if (selected == null) continue;
                 selected.EnsureVisibleForTable();
                 selected.DisableClick(false);
+                if (SpecialActionCardSystem.IsAdvanceNoticePendingCard(localIndex, selected) &&
+                    SpecialActionCardSystem.IsAdvanceNoticeActiveToday(localIndex))
+                    continue;
                 if (localIndex == 0) continue;
                 selected.CompleteCurrentMoveImmediately();
                 Debug.Log($"<color=#70E8FF>【オンライン卓上到着確認】{day}日目 " +

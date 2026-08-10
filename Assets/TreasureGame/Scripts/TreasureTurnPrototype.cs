@@ -146,6 +146,16 @@ public class TreasureTurnPrototype : MonoBehaviour
                 190f * uiScale, 46f * uiScale);
             if (GUI.Button(exitRect, "ホームへ戻る", style))
                 showOnlineExitConfirmation = true;
+
+            bool host = KaitouOnline.KaitouOnlineSession.Instance != null &&
+                        KaitouOnline.KaitouOnlineSession.Instance.IsHost;
+            GUI.enabled = host;
+            Rect lobbyRect = new Rect(buttonMargin * uiScale, 122f * uiScale,
+                190f * uiScale, 46f * uiScale);
+            if (GUI.Button(lobbyRect,
+                    host ? "ロビーへ戻る" : "ホストのみロビーへ戻れます", style))
+                KaitouOnline.KaitouOnlineSession.Instance?.ReturnToLobby();
+            GUI.enabled = true;
         }
 
         if (showOnlineExitConfirmation)

@@ -615,19 +615,6 @@ public class CardInteraction : MonoBehaviour
 
     }
 
-    // オンライン表示確認専用。通常の公開枚数やゲーム進行イベントには触れない。
-    public void FlipForVisualTest()
-    {
-        EnsureVisibleForTable();
-        revealedOnTable = true;
-        selectedHoverLocked = false;
-        transform.localScale = originalScale;
-        SetClickBrightness(1f);
-        targetRotation = Quaternion.Euler(transform.rotation.eulerAngles.x + 180f,
-            transform.rotation.eulerAngles.y + 180f, transform.rotation.eulerAngles.z);
-        isFlipping = true;
-    }
-
     public void RevealBeforeAllCards(bool dimAfterReveal = false)
     {
         if (earlyRevealed) return;
