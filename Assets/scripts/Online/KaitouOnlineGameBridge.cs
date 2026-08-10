@@ -76,6 +76,15 @@ namespace KaitouOnline
             if (Instance == this) Instance = null;
         }
 
+        private System.Collections.IEnumerator ClearTemporaryMessage(
+            string message, float seconds)
+        {
+            yield return new WaitForSecondsRealtime(seconds);
+            // 表示中に次の案内へ切り替わっていた場合は、その新しい案内を消さない。
+            if (PriorityMessage == message) PriorityMessage = "";
+            if (WaitingMessage == message) WaitingMessage = "";
+        }
+
         public static void MarkConnectionLost(string message)
         {
             WaitingMessage = string.IsNullOrEmpty(message)
@@ -790,6 +799,7 @@ namespace KaitouOnline
                 string playerName = PlayerNameForNetworkSeat(takeover.seat);
                 PriorityMessage = $"{playerName}との接続が切れたため、CPUに交代します。";
                 WaitingMessage = PriorityMessage;
+                StartCoroutine(ClearTemporaryMessage(PriorityMessage, 3.5f));
                 Debug.LogWarning($"【CPU交代】P{takeover.seat + 1} {playerName}：" +
                                  takeover.reason);
                 if (session.IsHost)
