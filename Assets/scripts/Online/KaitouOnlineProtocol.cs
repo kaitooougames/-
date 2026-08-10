@@ -31,7 +31,8 @@ namespace KaitouOnline
         TurnCleanup,
         StateCheckpointResult,
         DesyncDetected,
-        PlayerNameUpdate
+        PlayerNameUpdate,
+        SeatCpuTakeover
     }
 
     [Serializable]
@@ -62,6 +63,14 @@ namespace KaitouOnline
     {
         public int seat;
         public bool host;
+    }
+
+    [Serializable]
+    public struct SeatCpuTakeover
+    {
+        public int seat;
+        public int day;
+        public string reason;
     }
 
     [Serializable]
@@ -208,7 +217,7 @@ namespace KaitouOnline
     {
         // オンライン進行規約。古いMacビルドとの混在を防ぐため、
         // フェーズ同期方式を変更したら必ず更新する。
-        public const int Version = 29;
+        public const int Version = 30;
         public const string MessageName = "KaitouOnlineEvent";
 
         public static string Json<T>(T value) => JsonUtility.ToJson(value);

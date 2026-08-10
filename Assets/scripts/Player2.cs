@@ -79,6 +79,12 @@ public class Player2 : MonoBehaviour
         card.SelectedNumber = 10;
     }
 
+    public void SetCpuDeclaredNumber(int number)
+    {
+        SelectedNumber = number;
+        if (selectedCard != null) selectedCard.SelectedNumber = number;
+    }
+
     public void SelectOnlineCard(int specialEffect, bool exhibit, bool thief, bool cage,
         int declaredNumber)
     {

@@ -167,7 +167,12 @@ public class TreasureTurnPrototype : MonoBehaviour
                 (Screen.width - confirmWidth) * 0.5f,
                 (Screen.height - confirmHeight) * 0.5f,
                 confirmWidth, confirmHeight);
-            GUI.Box(confirmRect, "接続を切ってホームへ戻りますか？");
+            bool leavingHost = KaitouOnline.KaitouOnlineSession.Instance != null &&
+                               KaitouOnline.KaitouOnlineSession.Instance.IsHost;
+            string exitMessage = leavingHost
+                ? "ホストが終了すると、この対戦も終了します。\nホームへ戻りますか？"
+                : "退出後はCPUがあなたの席を引き継ぎます。\nホームへ戻りますか？";
+            GUI.Box(confirmRect, exitMessage);
             float choiceY = confirmRect.y + 78f * uiScale;
             if (GUI.Button(new Rect(confirmRect.x + 28f * uiScale, choiceY,
                     135f * uiScale, 48f * uiScale), "戻る", style))

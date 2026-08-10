@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.Collections;
 using Unity.Netcode;
@@ -34,12 +35,19 @@ namespace KaitouOnline
         private string preferredLocalPlayerName = "";
         private bool localPlayerNameConfirmed;
         private bool fatalReturnStarted;
+        private readonly HashSet<int> cpuTakeoverSeats = new HashSet<int>();
 
         public string JoinCode => joinCode;
         public int RoomPlayerCount => roomPlayerCount;
         public int ConfirmedHumanPlayers => confirmedHumanPlayers;
         public bool ParticipantsConfirmed => participantsConfirmed;
-        public int CpuPlayers => cpuPlayers;
+        public int CpuPlayers => cpuPlayers + cpuTakeoverSeats.Count;
+        public int ActiveHumanPlayers => Mathf.Max(1,
+            confirmedHumanPlayers - cpuTakeoverSeats.Count);
+        public bool HasCpuControlledSeats => CpuPlayers > 0;
+        public bool IsCpuControlledSeat(int seat) =>
+            seat >= 0 && seat < roomPlayerCount &&
+            (seat >= confirmedHumanPlayers || cpuTakeoverSeats.Contains(seat));
         public int LocalSeat =>
             NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening
                 ? -1
@@ -124,6 +132,7 @@ namespace KaitouOnline
             try
             {
                 ResetRoomPlayerNames();
+                cpuTakeoverSeats.Clear();
                 confirmedHumanPlayers = 0;
                 participantsConfirmed = false;
                 cpuPlayers = 0;
@@ -194,6 +203,7 @@ namespace KaitouOnline
             confirmedHumanPlayers = ConnectedPlayers;
             participantsConfirmed = true;
             cpuPlayers = 0;
+            cpuTakeoverSeats.Clear();
             roomPlayerCount = confirmedHumanPlayers;
             BroadcastLobby();
             Report($"参加者{confirmedHumanPlayers}人を確定しました。CPU人数を選んでください。");
@@ -207,6 +217,7 @@ namespace KaitouOnline
             participantsConfirmed = false;
             confirmedHumanPlayers = 0;
             cpuPlayers = 0;
+            cpuTakeoverSeats.Clear();
             roomPlayerCount = Mathf.Clamp(ConnectedPlayers, 2, 4);
             Send(MessageType.ReturnToLobby, -1, "");
             BroadcastLobby();
@@ -223,6 +234,7 @@ namespace KaitouOnline
                 roomPlayerCount = Mathf.Clamp(start.playerCount, 2, 4);
                 confirmedHumanPlayers = Mathf.Clamp(start.humanPlayerCount, 2, 4);
                 cpuPlayers = Mathf.Clamp(start.cpuPlayers, 0, 2);
+                cpuTakeoverSeats.Clear();
                 participantsConfirmed = true;
                 gameSeed = start.randomSeed;
                 onlineGameStarted = true;
@@ -233,6 +245,7 @@ namespace KaitouOnline
                 roomPlayerCount = Mathf.Clamp(restart.playerCount, 2, 4);
                 confirmedHumanPlayers = Mathf.Clamp(restart.humanPlayerCount, 2, 4);
                 cpuPlayers = Mathf.Clamp(restart.cpuPlayers, 0, 2);
+                cpuTakeoverSeats.Clear();
                 participantsConfirmed = true;
                 gameSeed = restart.randomSeed;
                 onlineGameStarted = true;
@@ -267,6 +280,7 @@ namespace KaitouOnline
             participantsConfirmed = false;
             confirmedHumanPlayers = 0;
             cpuPlayers = 0;
+            cpuTakeoverSeats.Clear();
             Report("切断しました。");
         }
 
@@ -378,12 +392,34 @@ namespace KaitouOnline
             {
                 Report($"参加者が切断しました（現在 {ConnectedPlayers}人）");
                 if (onlineGameStarted)
-                    StartCoroutine(ReturnHomeAfterConnectionLoss(
-                        "相手とのオンライン接続が切れたため、ホームへ戻ります。"));
+                    TakeOverSeatWithCpu((int)clientId,
+                        "通信が切れたためCPUへ交代しました。");
                 else
                     ResetLobbySelection();
                 BroadcastLobby();
             }
+        }
+
+        public void TakeOverSeatWithCpu(int seat, string reason)
+        {
+            if (!IsHost || !onlineGameStarted || seat <= 0 ||
+                seat >= confirmedHumanPlayers || !cpuTakeoverSeats.Add(seat)) return;
+            string playerName = GetPlayerName(seat);
+            SeatCpuTakeover state = new SeatCpuTakeover
+            {
+                seat = seat,
+                day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1,
+                reason = string.IsNullOrWhiteSpace(reason)
+                    ? "接続が切れたためCPUへ交代しました。" : reason
+            };
+            Send(MessageType.SeatCpuTakeover, -1, Protocol.Json(state));
+            Report($"{playerName}は{state.reason}");
+            NetworkManager manager = NetworkManager.Singleton;
+            ulong clientId = (ulong)seat;
+            if (manager != null && manager.IsListening &&
+                manager.ConnectedClients.ContainsKey(clientId))
+                manager.DisconnectClient(clientId,
+                    "同期応答がないためCPUへ交代しました。");
         }
 
         private System.Collections.IEnumerator ReturnHomeAfterConnectionLoss(string message)
@@ -400,11 +436,13 @@ namespace KaitouOnline
             participantsConfirmed = false;
             confirmedHumanPlayers = 0;
             cpuPlayers = 0;
+            cpuTakeoverSeats.Clear();
             SceneManager.LoadScene("MainMenu");
         }
 
         private void ResetLobbySelection()
         {
+            cpuTakeoverSeats.Clear();
             participantsConfirmed = false;
             confirmedHumanPlayers = 0;
             cpuPlayers = 0;
@@ -490,12 +528,19 @@ namespace KaitouOnline
                         localPlayerNameConfirmed = true;
                 }
             }
+            else if (envelope.type == MessageType.SeatCpuTakeover)
+            {
+                SeatCpuTakeover takeover = Protocol.Parse<SeatCpuTakeover>(envelope.payload);
+                if (takeover.seat > 0 && takeover.seat < confirmedHumanPlayers)
+                    cpuTakeoverSeats.Add(takeover.seat);
+            }
             else if (envelope.type == MessageType.StartGame)
             {
                 StartGameState start = Protocol.Parse<StartGameState>(envelope.payload);
                 roomPlayerCount = Mathf.Clamp(start.playerCount, 2, 4);
                 confirmedHumanPlayers = Mathf.Clamp(start.humanPlayerCount, 2, 4);
                 cpuPlayers = Mathf.Clamp(start.cpuPlayers, 0, 2);
+                cpuTakeoverSeats.Clear();
                 participantsConfirmed = true;
                 gameSeed = start.randomSeed;
                 onlineGameStarted = true;
@@ -506,6 +551,7 @@ namespace KaitouOnline
                 participantsConfirmed = false;
                 confirmedHumanPlayers = 0;
                 cpuPlayers = 0;
+                cpuTakeoverSeats.Clear();
                 if (SceneManager.GetActiveScene().name != "MainMenu")
                     SceneManager.LoadScene("MainMenu");
             }
@@ -515,6 +561,7 @@ namespace KaitouOnline
                 roomPlayerCount = Mathf.Clamp(restart.playerCount, 2, 4);
                 confirmedHumanPlayers = Mathf.Clamp(restart.humanPlayerCount, 2, 4);
                 cpuPlayers = Mathf.Clamp(restart.cpuPlayers, 0, 2);
+                cpuTakeoverSeats.Clear();
                 participantsConfirmed = true;
                 gameSeed = restart.randomSeed;
                 onlineGameStarted = true;

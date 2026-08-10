@@ -58,6 +58,7 @@ namespace KaitouOnline
         private readonly Dictionary<string, Dictionary<int, string>> checkpointSignatures =
             new Dictionary<string, Dictionary<int, string>>();
         private readonly HashSet<string> completedCheckpoints = new HashSet<string>();
+        private readonly HashSet<string> checkpointTimeouts = new HashSet<string>();
         private bool desyncAbortStarted;
 
         private void Awake()
@@ -157,6 +158,42 @@ namespace KaitouOnline
             IsOnlineSession && (Instance == null ||
                 !Instance.turnCleanupReleasedDays.Contains(day));
 
+        public static void VerifyActionCardRecovery(int day)
+        {
+            if (!IsOnlineSession || Instance == null) return;
+            Instance.StartCoroutine(Instance.VerifyActionCardRecoveryRoutine(day));
+        }
+
+        private System.Collections.IEnumerator VerifyActionCardRecoveryRoutine(int day)
+        {
+            // 通常の回収モーションを見せた後、通信遅延や途中停止で卓上に残った
+            // 他席のカードを必ず保管位置へ確定する。ゲーム状態は変更せず表示だけ直す。
+            yield return new WaitForSeconds(1.25f);
+            Vector3[] storagePositions =
+            {
+                Vector3.zero,
+                new Vector3(0f, 2f, 2.5f),
+                new Vector3(-5f, 2f, 0f),
+                new Vector3(5f, 2f, 0f)
+            };
+            for (int localIndex = 1; localIndex < 4; localIndex++)
+            {
+                if (!IsConfiguredLocalSeat(localIndex)) continue;
+                List<CardInteraction> cards = GetActionCardsAtLocalIndex(localIndex);
+                if (cards == null) continue;
+                foreach (CardInteraction card in cards)
+                {
+                    if (card == null ||
+                        SpecialActionCardSystem.IsAdvanceNoticePendingCard(localIndex, card))
+                        continue;
+                    card.ResetForNextActionSelection();
+                    card.MoveToImmediate(storagePositions[localIndex]);
+                }
+            }
+            Debug.Log($"<color=#70E8FF>【行動カード回収確認】{day}日目：" +
+                      "全参加席のカード位置を確認しました。</color>");
+        }
+
         public static void SubmitDisplayTreasure(TreasureGame.Treasure treasure)
         {
             if (!IsOnlineSession || treasure == null) return;
@@ -215,10 +252,9 @@ namespace KaitouOnline
             TreasureGame.TreasureController controller)
         {
             if (!IsOnlineSession || Instance == null || controller == null ||
-                !Instance.session.IsHost || Instance.session.CpuPlayers <= 0)
+                !Instance.session.IsHost || !Instance.session.HasCpuControlledSeats)
                 return false;
 
-            int firstCpuSeat = Instance.session.ConfirmedHumanPlayers;
             TreasureGame.Treasure[] treasures =
                 Object.FindObjectsByType<TreasureGame.Treasure>(FindObjectsSortMode.None);
 
@@ -226,7 +262,8 @@ namespace KaitouOnline
             {
                 foreach (TreasureGame.Treasure treasure in treasures)
                 {
-                    if (treasure == null || treasure.NetworkOwnerSeat < firstCpuSeat ||
+                    if (treasure == null ||
+                        !Instance.session.IsCpuControlledSeat(treasure.NetworkOwnerSeat) ||
                         !controller.CanInteract(treasure)) continue;
                     Instance.BroadcastCpuDisplayChoice(treasure);
                     return true;
@@ -236,7 +273,7 @@ namespace KaitouOnline
                      controller.ActiveRobber != null)
             {
                 int robberSeat = ToNetworkTreasureSeat(controller.ActiveRobber.PlayerId);
-                if (robberSeat < firstCpuSeat) return false;
+                if (!Instance.session.IsCpuControlledSeat(robberSeat)) return false;
                 foreach (TreasureGame.Treasure treasure in treasures)
                 {
                     if (!controller.CanOnlineCpuSteal(treasure)) continue;
@@ -248,7 +285,7 @@ namespace KaitouOnline
                      controller.ActiveRobber != null)
             {
                 int robberSeat = ToNetworkTreasureSeat(controller.ActiveRobber.PlayerId);
-                if (robberSeat < firstCpuSeat) return false;
+                if (!Instance.session.IsCpuControlledSeat(robberSeat)) return false;
                 foreach (TreasureGame.Treasure treasure in treasures)
                 {
                     if (!controller.CanOnlineCpuAnalyze(treasure)) continue;
@@ -260,7 +297,8 @@ namespace KaitouOnline
             {
                 foreach (TreasureGame.Treasure treasure in treasures)
                 {
-                    if (treasure == null || treasure.NetworkOwnerSeat < firstCpuSeat ||
+                    if (treasure == null ||
+                        !Instance.session.IsCpuControlledSeat(treasure.NetworkOwnerSeat) ||
                         !controller.CanInteract(treasure)) continue;
                     Instance.BroadcastCpuRobberDisplayChoice(treasure);
                     return true;
@@ -527,16 +565,14 @@ namespace KaitouOnline
         {
             if (!IsOnlineSession || Instance == null || !Instance.session.IsHost) return false;
             int networkSeat = Instance.NetworkSeatForLocalIndex(localSeat);
-            return networkSeat >= Instance.session.ConfirmedHumanPlayers &&
-                   networkSeat < Instance.session.RoomPlayerCount;
+            return Instance.session.IsCpuControlledSeat(networkSeat);
         }
 
         public static bool IsHostCpuTreasureSeat(int localTreasureSeat)
         {
             if (!IsOnlineSession || Instance == null || !Instance.session.IsHost) return false;
             int networkSeat = Instance.NetworkSeatAtOrder(localTreasureSeat);
-            return networkSeat >= Instance.session.ConfirmedHumanPlayers &&
-                   networkSeat < Instance.session.RoomPlayerCount;
+            return Instance.session.IsCpuControlledSeat(networkSeat);
         }
 
         public static bool ValidateSeatMappings()
@@ -746,6 +782,27 @@ namespace KaitouOnline
 
         private void OnMessage(Envelope envelope)
         {
+            if (envelope.type == MessageType.SeatCpuTakeover)
+            {
+                SeatCpuTakeover takeover = Protocol.Parse<SeatCpuTakeover>(envelope.payload);
+                foreach (Dictionary<int, string> values in checkpointSignatures.Values)
+                    values.Remove(takeover.seat);
+                string playerName = PlayerNameForNetworkSeat(takeover.seat);
+                PriorityMessage = $"{playerName}との接続が切れたため、CPUに交代します。";
+                WaitingMessage = PriorityMessage;
+                Debug.LogWarning($"【CPU交代】P{takeover.seat + 1} {playerName}：" +
+                                 takeover.reason);
+                if (session.IsHost)
+                {
+                    int day = HandManager.Instance != null
+                        ? HandManager.Instance.CurrentDay : takeover.day;
+                    EnsureHostCpuChoices(day);
+                    if (hostChoices.Count >= session.RoomPlayerCount)
+                        BroadcastReady();
+                }
+                return;
+            }
+
             if (envelope.type == MessageType.ActionRequest && session.IsHost)
             {
                 ActionRequest request = Protocol.Parse<ActionRequest>(envelope.payload);
@@ -1078,14 +1135,21 @@ namespace KaitouOnline
                 values = new Dictionary<int, string>();
                 checkpointSignatures[key] = values;
             }
-            values[checkpoint.actorSeat] = checkpoint.signature ?? "";
-            int expected = Mathf.Max(1, session.ConfirmedHumanPlayers);
-            if (values.Count < expected) return;
+            if (!session.IsCpuControlledSeat(checkpoint.actorSeat))
+                values[checkpoint.actorSeat] = checkpoint.signature ?? "";
+            if (session.IsHost && checkpointTimeouts.Add(key))
+                StartCoroutine(WatchCheckpointTimeout(checkpoint, key));
+            int expected = session.ActiveHumanPlayers;
+            int received = 0;
+            foreach (int seat in values.Keys)
+                if (!session.IsCpuControlledSeat(seat)) received++;
+            if (received < expected) return;
 
             string first = null;
             bool matches = true;
             foreach (KeyValuePair<int, string> value in values)
             {
+                if (session.IsCpuControlledSeat(value.Key)) continue;
                 if (first == null) first = value.Value;
                 else if (first != value.Value) matches = false;
             }
@@ -1093,7 +1157,10 @@ namespace KaitouOnline
             {
                 var details = new List<string>();
                 foreach (KeyValuePair<int, string> value in values)
+                {
+                    if (session.IsCpuControlledSeat(value.Key)) continue;
                     details.Add($"端末P{value.Key + 1}=[{value.Value}]");
+                }
                 Debug.LogError("【行動手札同期差分】" + string.Join(" / ", details));
             }
             StateCheckpoint result = checkpoint;
@@ -1107,6 +1174,27 @@ namespace KaitouOnline
                 phaseName + "が端末間で一致しなかったため、接続を終了しました。";
             session.Send(matches ? MessageType.StateCheckpointResult :
                 MessageType.DesyncDetected, -1, Protocol.Json(result));
+        }
+
+        private System.Collections.IEnumerator WatchCheckpointTimeout(
+            StateCheckpoint checkpoint, string key)
+        {
+            yield return new WaitForSecondsRealtime(8f);
+            if (completedCheckpoints.Contains(key) ||
+                !checkpointSignatures.TryGetValue(key,
+                    out Dictionary<int, string> values)) yield break;
+
+            var missingSeats = new List<int>();
+            for (int seat = 1; seat < session.ConfirmedHumanPlayers; seat++)
+                if (!session.IsCpuControlledSeat(seat) && !values.ContainsKey(seat))
+                    missingSeats.Add(seat);
+            foreach (int seat in missingSeats)
+                session.TakeOverSeatWithCpu(seat,
+                    "8秒間同期応答がなかったためCPUへ交代しました。");
+
+            // CPU交代で待機人数が減ったため、残った人間の状態だけでもう一度判定する。
+            if (missingSeats.Count > 0)
+                ReceiveStateCheckpoint(checkpoint);
         }
 
         private System.Collections.IEnumerator DisconnectAfterDesync(string message)
@@ -1489,15 +1577,25 @@ namespace KaitouOnline
 
         private void EnsureHostCpuChoices(int day)
         {
-            if (!session.IsHost || hostChoices.Count < session.ConfirmedHumanPlayers) return;
-            for (int networkSeat = session.ConfirmedHumanPlayers;
+            if (!session.IsHost || hostChoices.Count < session.ActiveHumanPlayers) return;
+            for (int networkSeat = 0;
                  networkSeat < session.RoomPlayerCount; networkSeat++)
             {
+                if (!session.IsCpuControlledSeat(networkSeat)) continue;
                 if (hostChoices.ContainsKey(networkSeat)) continue;
                 int localIndex = LocalIndexForNetworkSeat(networkSeat);
                 CardInteraction selected = null;
                 int declaredNumber = 0;
-                if (localIndex == 2)
+                if (localIndex == 1)
+                {
+                    Player2 cpu = FindFirstObjectByType<Player2>();
+                    cpu?.SelectRandomCard();
+                    selected = cpu?.SelectedCard;
+                    declaredNumber = selected != null && selected.isPhantomThief
+                        ? selected.RandomDeclaredNumber() : 0;
+                    cpu?.SetCpuDeclaredNumber(declaredNumber);
+                }
+                else if (localIndex == 2)
                 {
                     Player3 cpu = FindFirstObjectByType<Player3>();
                     cpu?.SelectRandomCard();
@@ -1532,6 +1630,12 @@ namespace KaitouOnline
         private static bool IsCpuActionRequired(int localIndex)
         {
             if (SpecialActionCardSystem.CannotActToday(localIndex)) return false;
+            if (localIndex == 1)
+            {
+                Player2 player = Object.FindFirstObjectByType<Player2>();
+                return player != null && player.gameObject.activeInHierarchy &&
+                       !player.isEliminated;
+            }
             if (localIndex == 2)
             {
                 Player3 player = Object.FindFirstObjectByType<Player3>();
@@ -1578,7 +1682,7 @@ namespace KaitouOnline
                 if (choice.seat == session.LocalSeat) continue;
                 // ホストのCPUはEnsureHostCpuChoicesで既に実カードを選択・移動済み。
                 // Snapshotを重ねて適用すると同種の別カードまで卓上へ出て二重表示になる。
-                if (session.IsHost && choice.seat >= session.ConfirmedHumanPlayers)
+                if (session.IsHost && session.IsCpuControlledSeat(choice.seat))
                     continue;
                 int localIndex = LocalIndexForNetworkSeat(choice.seat);
                 bool isPass = choice.specialEffect == 0 && !choice.isExhibit &&

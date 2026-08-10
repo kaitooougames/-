@@ -1230,6 +1230,9 @@ public class CameraController : MonoBehaviour
             KaitouOnline.KaitouOnlineGameBridge.PreparePenaltyRandom(penaltyDay, 3);
             Player4.MoveCardsAfterThiefPhase();
         }
+        if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            KaitouOnline.KaitouOnlineGameBridge.VerifyActionCardRecovery(
+                handManager != null ? handManager.CurrentDay - 1 : 1);
         ReevaluateActionCardEliminations();
         if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
         {
