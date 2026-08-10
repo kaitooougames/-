@@ -33,6 +33,7 @@ public class CameraController : MonoBehaviour
     private string prisonRollMessage = "";
     private readonly Dictionary<int, StealNumberEffect> prisonFloorMarkers =
         new Dictionary<int, StealNumberEffect>();
+    private readonly HashSet<int> announcedEliminatedSeats = new HashSet<int>();
     private string detectiveAnnouncement = "";
     private AudioSource detectiveAudioSource;
     private AudioClip detectiveWrongClip;
@@ -1259,6 +1260,33 @@ public class CameraController : MonoBehaviour
         if (Player4 != null && Player4.gameObject.activeInHierarchy &&
             SpecialActionCardSystem.IsEliminatedByNormalCards(Player4.player4Cards))
             Player4.isEliminated = true;
+
+        AnnounceElimination(0, Player != null && Player.isEliminated,
+            Player?.playerCards);
+        AnnounceElimination(1, Player2 != null && Player2.gameObject.activeInHierarchy &&
+            Player2.isEliminated, Player2?.player2Cards);
+        AnnounceElimination(2, Player3 != null && Player3.gameObject.activeInHierarchy &&
+            Player3.isEliminated, Player3?.player3Cards);
+        AnnounceElimination(3, Player4 != null && Player4.gameObject.activeInHierarchy &&
+            Player4.isEliminated, Player4?.player4Cards);
+    }
+
+    private void AnnounceElimination(int localSeat, bool eliminated,
+        List<CardInteraction> cards)
+    {
+        if (!eliminated || !announcedEliminatedSeats.Add(localSeat)) return;
+        List<CardInteraction> normalCards = SpecialActionCardSystem.NormalCards(cards);
+        bool cageOnly = normalCards.Count == 1 && normalCards[0].IsCageCard();
+        string playerName = KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession
+            ? KaitouOnline.KaitouOnlineGameBridge.PlayerNameForLocalSeat(localSeat)
+            : $"Player{localSeat + 1}";
+        string reason = cageOnly
+            ? "通常の檻1枚になったため"
+            : "通常カードが全て没収されたため";
+        string message = $"{playerName}は、{reason}脱落しました。";
+        Debug.Log($"<color=#FF8A8A>【脱落】{message}</color>");
+        FindFirstObjectByType<TreasureGame.TreasureController>()?
+            .ShowTemporaryInstruction(message);
     }
 
     private IEnumerator RollPrisonReleaseDice()
@@ -1392,6 +1420,22 @@ public class CameraController : MonoBehaviour
         yield return new WaitForSeconds(2f);
         cardInteraction.EnableCardClicks(); // カードクリック再開
         if (handManager != null) handManager.RefreshPlayerOneCardAvailability();
+        if (Player != null && Player.isEliminated)
+        {
+            Debug.Log("<color=#BFA8FF>【行動休止】Player1は脱落しているため行動を自動パスします。</color>");
+            if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
+            {
+                KaitouOnline.KaitouOnlineGameBridge.SubmitLocalPass();
+                isFlipping = false;
+                yield break;
+            }
+            Player2?.SelectRandomCard();
+            Player3?.SelectRandomCard();
+            Player4?.SelectRandomCard();
+            MoveCamera();
+            isFlipping = false;
+            yield break;
+        }
         if (SpecialActionCardSystem.TryGetActiveAdvanceNotice(0, out CardInteraction advanceNotice))
         {
             Player.RestoreAdvanceNotice(advanceNotice);

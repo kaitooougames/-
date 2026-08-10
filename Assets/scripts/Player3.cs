@@ -228,11 +228,13 @@ public class Player3 : MonoBehaviour
                 Debug.Log($"{name} は前科ありのため行動カードを1枚没収されました。残り {player3Cards.Count} 枚。");
             }
 
-            // 🟡 残り1枚が檻カードなら脱落＋檻カード削除
+            // 通常の檻1枚だけでも脱落。カード自体は同期用に手札へ残す。
             if (SpecialActionCardSystem.IsEliminatedByNormalCards(player3Cards))
             {
-                Debug.Log($"{name} は檻カード1枚のみになったため脱落しました！");
-                player3Cards.RemoveAt(0); // 檻カード削除
+                List<CardInteraction> normalCards = SpecialActionCardSystem.NormalCards(player3Cards);
+                Debug.Log(normalCards.Count == 1 && normalCards[0].IsCageCard()
+                    ? $"{name} は通常の檻1枚になったため脱落しました！"
+                    : $"{name} は通常カードがすべて没収されたため脱落しました！");
                 isEliminated = true;
                 return;
             }

@@ -48,6 +48,8 @@ public class TreasureController : MonoBehaviour
     private readonly HashSet<Treasure> treasuresInTransit = new HashSet<Treasure>();
     private readonly HashSet<Player> blockedFromWinningThisTurn = new HashSet<Player>();
     private readonly HashSet<int> eliminatedPlayerIds = new HashSet<int>();
+    private string temporaryInstruction = "";
+    private float temporaryInstructionUntil;
     private readonly List<int> queuedArrestRewardPlayerIds = new List<int>();
     private static readonly TreasureType[] RevealTypeOrder =
     {
@@ -92,11 +94,21 @@ public class TreasureController : MonoBehaviour
         else eliminatedPlayerIds.Remove(playerId);
         Debug.Log($"【脱落同期】Player{playerId + 1}：{(eliminated ? "勝利対象外" : "参加中")}");
     }
+
+    public void ShowTemporaryInstruction(string message, float seconds = 6f)
+    {
+        temporaryInstruction = message ?? "";
+        temporaryInstructionUntil = Time.unscaledTime + Mathf.Max(0f, seconds);
+    }
+
     public string InstructionText
     {
         get
         {
             if (Phase == TreasurePhase.GameOver) return gameResultText;
+            if (!string.IsNullOrEmpty(temporaryInstruction) &&
+                Time.unscaledTime < temporaryInstructionUntil)
+                return temporaryInstruction;
             if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession &&
                 !string.IsNullOrEmpty(KaitouOnline.KaitouOnlineGameBridge.PriorityMessage))
                 return KaitouOnline.KaitouOnlineGameBridge.PriorityMessage;
