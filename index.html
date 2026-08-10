@@ -65,12 +65,13 @@
       }
 
       var buildUrl = "Build";
-      var loaderUrl = buildUrl + "/KaitouOnlineWebGL.loader.js";
+      var buildVersion = "80299a3";
+      var loaderUrl = buildUrl + "/KaitouOnlineWebGL.loader.js?v=" + buildVersion;
       var config = {
         arguments: [],
-        dataUrl: buildUrl + "/KaitouOnlineWebGL.data",
-        frameworkUrl: buildUrl + "/KaitouOnlineWebGL.framework.js",
-        codeUrl: buildUrl + "/KaitouOnlineWebGL.wasm",
+        dataUrl: buildUrl + "/KaitouOnlineWebGL.data?v=" + buildVersion,
+        frameworkUrl: buildUrl + "/KaitouOnlineWebGL.framework.js?v=" + buildVersion,
+        codeUrl: buildUrl + "/KaitouOnlineWebGL.wasm?v=" + buildVersion,
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "怪盗ゲーム TREASURE",
