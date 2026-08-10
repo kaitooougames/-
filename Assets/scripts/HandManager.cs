@@ -341,6 +341,14 @@ public class HandManager : MonoBehaviour
         foreach (CardInteraction card in cards)
         {
             if (card == null) continue;
+            // 選択済みカードはすでに手札ではなく卓上カード。
+            // 遅延呼び出しや特殊効果による再判定で暗転を上書きしない。
+            if (cardSelected && card == activeSelectedCard)
+            {
+                card.EnsureVisibleForTable();
+                card.DisableClick(false);
+                continue;
+            }
             if (SpecialActionCardSystem.TryGetActiveAdvanceNotice(0,
                     out CardInteraction activeAdvanceNotice) && card != activeAdvanceNotice)
             {
@@ -691,6 +699,8 @@ public class HandManager : MonoBehaviour
         }
         cardSelected = true;
         activeSelectedCard = selectedCard;
+        selectedCard.EnsureVisibleForTable();
+        selectedCard.DisableClick(false);
         selectedCard.LockSelectedThiefScale();
         Debug.Log("カード選択: " + selectedCard.name);
 

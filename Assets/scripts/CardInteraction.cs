@@ -154,6 +154,9 @@ public class CardInteraction : MonoBehaviour
         transform.localScale = selectedHoverLocked
             ? originalScale * SelectedThiefScale : originalScale;
         SetVisualVisible(true);
+        // 手札で選択不可だったときの暗転用PropertyBlockを卓上へ持ち越さない。
+        // 選択カードは裏向きで移動中でも常に通常の明るさにする。
+        SetClickBrightness(1f);
     }
 
     public Vector3 VisualScale => transform.localScale;

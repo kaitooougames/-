@@ -118,7 +118,15 @@ public class TreasureController : MonoBehaviour
                         displaySelections.TryGetValue(p, out List<Treasure> cards) &&
                         cards.Count < requiredDisplayCounts[p]);
                     if (waiting != null)
-                        return $"{OnlinePlayerLabel(waiting)}が展示する宝を選んでいます。";
+                    {
+                        int selectedCount = displaySelections.TryGetValue(waiting,
+                            out List<Treasure> waitingCards) ? waitingCards.Count : 0;
+                        int remaining = Mathf.Max(0,
+                            requiredDisplayCounts[waiting] - selectedCount);
+                        return arrestRewardDisplayActive
+                            ? $"{OnlinePlayerLabel(waiting)}が檻の逮捕報酬で展示する宝を選んでいます（あと{remaining}つ）。"
+                            : $"{OnlinePlayerLabel(waiting)}が展示する宝を選んでいます（あと{remaining}つ）。";
+                    }
                 }
                 return string.Empty;
             }
@@ -1230,7 +1238,8 @@ public class TreasureController : MonoBehaviour
             }
         string[] labels = state.winnerSeats == null
             ? System.Array.Empty<string>()
-            : System.Array.ConvertAll(state.winnerSeats, seat => $"Player{seat + 1}");
+            : System.Array.ConvertAll(state.winnerSeats,
+                KaitouOnline.KaitouOnlineGameBridge.PlayerNameForNetworkSeat);
         gameResultText = labels.Length <= 1
             ? $"{(labels.Length == 1 ? labels[0] : "Player")}の勝利！"
             : $"{string.Join("・", labels)}の引き分け勝利！";
@@ -1262,7 +1271,9 @@ public class TreasureController : MonoBehaviour
         queuedArrestRewardPlayerIds.Clear();
         endTurnAfterCurrentDisplay = true;
         arrestRewardDisplayActive = true;
-        string rewardNames = string.Join("・", System.Array.ConvertAll(rewardPlayers, id => $"Player{id + 1}"));
+        string rewardNames = string.Join("・", System.Array.ConvertAll(rewardPlayers,
+            id => id >= 0 && id < players.Count
+                ? OnlinePlayerLabel(players[id]) : $"Player{id + 1}"));
         Debug.Log($"<color=#FFD966>【檻の逮捕報酬により展示】{rewardNames}が宝を1枚展示します。</color>");
         BeginDisplayPhase(rewardPlayers, displayCounts);
         if (Phase == TreasurePhase.Waiting)
@@ -1595,8 +1606,13 @@ public class TreasureController : MonoBehaviour
 
     private string OnlinePlayerLabel(Player player)
     {
-        return player == null ? "相手" :
-            $"Player{NetworkSeatForLocalPlayerIndex(player.PlayerId) + 1}";
+        if (player == null) return "相手";
+        int networkSeat = NetworkSeatForLocalPlayerIndex(player.PlayerId);
+        KaitouOnline.KaitouOnlineSession session =
+            KaitouOnline.KaitouOnlineSession.Instance;
+        return session != null
+            ? session.GetPlayerName(networkSeat)
+            : $"Player{networkSeat + 1}";
     }
     private Treasure CreateCard(Spec spec, Player owner)
     {

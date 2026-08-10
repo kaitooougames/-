@@ -239,7 +239,12 @@ namespace KaitouOnline
                 Object.FindFirstObjectByType<TreasureGame.TreasureController>();
             if (controller == null) return;
             int day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1;
-            foreach (TreasureDisplayChoice choice in Instance.displayChoices)
+            // 最後の選択を適用するとResolveDisplaysがキューをClearする。
+            // 元Listを直接列挙するとゲストだけCollection modifiedで進行が止まるため、
+            // 受信時点のスナップショットを再生する。
+            var replayChoices = new List<TreasureDisplayChoice>(
+                Instance.displayChoices);
+            foreach (TreasureDisplayChoice choice in replayChoices)
                 if (choice.day == day)
                     controller.ApplyOnlineDisplayChoice(choice.treasureId);
         }
@@ -419,15 +424,20 @@ namespace KaitouOnline
                 Object.FindFirstObjectByType<TreasureGame.TreasureController>();
             if (controller == null) return;
             int day = HandManager.Instance != null ? HandManager.Instance.CurrentDay : 1;
-            foreach (TreasureStealChoice choice in Instance.stealChoices)
+            var replaySteals = new List<TreasureStealChoice>(Instance.stealChoices);
+            var replayDisplays = new List<TreasureDisplayChoice>(
+                Instance.robberDisplayChoices);
+            var replayAnalysis = new List<TreasureStealChoice>(
+                Instance.analysisChoices);
+            foreach (TreasureStealChoice choice in replaySteals)
                 if (choice.day == day)
                     controller.ApplyOnlineStealChoice(
                         choice.actorSeat, choice.treasureId);
-            foreach (TreasureDisplayChoice choice in Instance.robberDisplayChoices)
+            foreach (TreasureDisplayChoice choice in replayDisplays)
                 if (choice.day == day)
                     controller.ApplyOnlineRobberDisplayChoice(
                         choice.actorSeat, choice.treasureId);
-            foreach (TreasureStealChoice choice in Instance.analysisChoices)
+            foreach (TreasureStealChoice choice in replayAnalysis)
                 if (choice.day == day)
                     controller.ApplyOnlineAnalysisChoice(
                         choice.actorSeat, choice.treasureId);
@@ -546,6 +556,17 @@ namespace KaitouOnline
 
         public static int ToNetworkSeat(int localIndex) =>
             Instance != null ? Instance.NetworkSeatForLocalIndex(localIndex) : localIndex;
+
+        public static string PlayerNameForNetworkSeat(int networkSeat)
+        {
+            KaitouOnlineSession activeSession = KaitouOnlineSession.Instance;
+            return activeSession != null
+                ? activeSession.GetPlayerName(networkSeat)
+                : $"Player{networkSeat + 1}";
+        }
+
+        public static string PlayerNameForLocalSeat(int localSeat) =>
+            PlayerNameForNetworkSeat(ToNetworkSeat(localSeat));
 
         public static int ToLocalSeat(int networkSeat) =>
             Instance != null ? Instance.LocalIndexForNetworkSeat(networkSeat) : networkSeat;
@@ -1028,10 +1049,11 @@ namespace KaitouOnline
                     PriorityMessage = "";
                 else if (session.LocalSeat == status.victimSeat)
                     PriorityMessage =
-                        $"ハニートラップにより、行動カードをPlayer{status.robberSeat + 1}に見せてしまいました。";
+                        $"ハニートラップにより、行動カードを{PlayerNameForNetworkSeat(status.robberSeat)}に見せてしまいました。";
                 else
                     PriorityMessage =
-                        $"Player{status.robberSeat + 1}がPlayer{status.victimSeat + 1}の行動カードを確認中です。";
+                        $"{PlayerNameForNetworkSeat(status.robberSeat)}が" +
+                        $"{PlayerNameForNetworkSeat(status.victimSeat)}の行動カードを確認中です。";
                 return;
             }
 
@@ -1789,11 +1811,12 @@ namespace KaitouOnline
             for (int localIndex = 0; localIndex < positions.Length; localIndex++)
             {
                 // 自分のカードは従来どおり選択時のMoveToCenterに任せる。
-                if (localIndex == 0) continue;
                 if (!IsConfiguredLocalSeat(localIndex)) continue;
                 CardInteraction selected = GetSelectedCardAtLocalIndex(localIndex);
                 if (selected == null) continue;
                 selected.EnsureVisibleForTable();
+                selected.DisableClick(false);
+                if (localIndex == 0) continue;
                 selected.MoveTo(positions[localIndex], 2.5f);
                 Debug.Log($"<color=#70E8FF>【オンライン一斉卓上移動】{day}日目 " +
                           $"local P{localIndex + 1}：{selected.name}</color>");
@@ -1815,11 +1838,12 @@ namespace KaitouOnline
             yield return new WaitForSeconds(0.8f);
             for (int localIndex = 0; localIndex < 4; localIndex++)
             {
-                if (localIndex == 0) continue;
                 if (!IsConfiguredLocalSeat(localIndex)) continue;
                 CardInteraction selected = GetSelectedCardAtLocalIndex(localIndex);
                 if (selected == null) continue;
                 selected.EnsureVisibleForTable();
+                selected.DisableClick(false);
+                if (localIndex == 0) continue;
                 selected.CompleteCurrentMoveImmediately();
                 Debug.Log($"<color=#70E8FF>【オンライン卓上到着確認】{day}日目 " +
                           $"local P{localIndex + 1}：{selected.name} " +

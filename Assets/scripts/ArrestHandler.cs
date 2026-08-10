@@ -538,11 +538,11 @@ CardsCollected:
         {
             CardInteraction target = pendingFrameUpTargets[i];
             int playerId = FindPlayerIdByCard(target);
-            int displayedPlayerId = KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession
-                ? KaitouOnline.KaitouOnlineGameBridge.ToNetworkSeat(playerId)
-                : playerId;
+            string displayedPlayerName = KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession
+                ? KaitouOnline.KaitouOnlineGameBridge.PlayerNameForLocalSeat(playerId)
+                : $"Player {playerId + 1}";
             if (GUI.Button(new Rect(startX + i * width, 145f, width - 12f, 72f),
-                    $"Player {displayedPlayerId + 1}", buttonStyle))
+                    displayedPlayerName, buttonStyle))
             {
                 if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
                 {

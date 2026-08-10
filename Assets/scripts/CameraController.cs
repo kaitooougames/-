@@ -235,7 +235,7 @@ public class CameraController : MonoBehaviour
                 chosenSeat = detectiveTargetSeats[Random.Range(0, detectiveTargetSeats.Count)];
             }
             choicesByDetective[detectiveSeat] = chosenSeat;
-            Debug.Log($"【名探偵指名】Player{detectiveSeat + 1} → Player{chosenSeat + 1}");
+            Debug.Log($"【名探偵指名】{ActionPlayerName(detectiveSeat)} → {ActionPlayerName(chosenSeat)}");
         }
 
         // 正解した指名だけを、指名先ごとにまとめる。
@@ -245,14 +245,15 @@ public class CameraController : MonoBehaviour
         {
             CardInteraction targetCard = GetSelectedActionCard(choice.Value);
             detectiveAnnouncement =
-                $"Player{choice.Key + 1}の名探偵 → Player{choice.Value + 1}を指名";
+                $"{ActionPlayerName(choice.Key)}の名探偵 → {ActionPlayerName(choice.Value)}を指名";
             if (targetCard != null)
             {
                 yield return StartCoroutine(targetCard.BlinkAsDetectiveTarget());
             }
             if (targetCard == null || !targetCard.isPhantomThief)
             {
-                Debug.Log($"【名探偵失敗】Player{choice.Key + 1}の指名先Player{choice.Value + 1}は怪盗ではありません。");
+                Debug.Log($"【名探偵失敗】{ActionPlayerName(choice.Key)}の指名先" +
+                          $"{ActionPlayerName(choice.Value)}は怪盗ではありません。");
                 PlayDetectiveWrongSound();
                 yield return new WaitForSeconds(0.85f);
                 continue;
@@ -297,7 +298,7 @@ public class CameraController : MonoBehaviour
             }
 
             Debug.Log(
-                $"【名探偵成功】Player{successfulTarget + 1}の怪盗を逮捕・当日除外。" +
+                $"【名探偵成功】{ActionPlayerName(successfulTarget)}の怪盗を逮捕・当日除外。" +
                 $"正解者{successfulDetectives.Count}人、各自の特殊カード報酬{rewardCount}枚");
         }
         if (KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession)
@@ -356,6 +357,13 @@ public class CameraController : MonoBehaviour
         return Player4 != null && Player4.gameObject.activeInHierarchy && !Player4.isEliminated;
     }
 
+    private static string ActionPlayerName(int localSeat)
+    {
+        return KaitouOnline.KaitouOnlineGameBridge.IsOnlineSession
+            ? KaitouOnline.KaitouOnlineGameBridge.PlayerNameForLocalSeat(localSeat)
+            : $"Player{localSeat + 1}";
+    }
+
     private void OnGUI()
     {
         KaitouGuiFont.Apply();
@@ -380,7 +388,7 @@ public class CameraController : MonoBehaviour
         {
             int seat = detectiveTargetSeats[i];
             if (GUI.Button(new Rect(startX + i * width, 145f, width - 12f, 72f),
-                    $"Player {seat + 1}", buttonStyle))
+                    ActionPlayerName(seat), buttonStyle))
             {
                 detectiveChosenSeat = seat;
                 break;
@@ -519,7 +527,7 @@ public class CameraController : MonoBehaviour
                      treasureController.RevealDisplayedTypeExceptPlayer(
                          treasurePlayerId, choice.Value))
                 revealedSet.Add(treasure);
-            choiceLabels.Add($"P{choice.Key + 1}:{TreasureTypeLabel(choice.Value)}");
+            choiceLabels.Add($"{ActionPlayerName(choice.Key)}:{TreasureTypeLabel(choice.Value)}");
         }
 
         appraiserMessage = $"鑑定士を一斉公開中（{string.Join(" / ", choiceLabels)}）";
@@ -1281,8 +1289,8 @@ public class CameraController : MonoBehaviour
             else result = Random.Range(1, 7);
             prisonRollSeat = seat;
             prisonRollMessage =
-                $"Player{seat + 1}が監獄の釈放サイコロを振っています";
-            Debug.Log($"<color=#BFA8FF>【監獄】Player{seat + 1}が釈放サイコロを振ります。</color>");
+                $"{ActionPlayerName(seat)}が監獄の釈放サイコロを振っています";
+            Debug.Log($"<color=#BFA8FF>【監獄】{ActionPlayerName(seat)}が釈放サイコロを振ります。</color>");
             if (dice != null)
             {
                 while (dice.IsRolling) yield return null;
@@ -1297,8 +1305,8 @@ public class CameraController : MonoBehaviour
             if (released)
                 ClearFirstOffenseRestriction(seat);
             prisonRollMessage = released
-                ? $"Player{seat + 1}：{result}が出たため脱獄成功しました"
-                : $"Player{seat + 1}：{result}が出たため脱獄失敗しました";
+                ? $"{ActionPlayerName(seat)}：{result}が出たため脱獄成功しました"
+                : $"{ActionPlayerName(seat)}：{result}が出たため脱獄失敗しました";
             yield return new WaitForSeconds(1.8f);
             prisonRollSeat = -1;
             prisonRollMessage = "";

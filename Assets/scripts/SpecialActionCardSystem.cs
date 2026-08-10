@@ -786,6 +786,22 @@ public static class SpecialActionCardSystem
                 ownerCards.Find(card => card != null && card.isPhantomThief && !card.IsSpecialAction);
             if (thiefTemplate != null) thiefTemplates[seat] = thiefTemplate;
         }
+        // 選択中・公開中の通常カードは一時的に手札リストから外れることがある。
+        // 檻報酬の生成をその瞬間のリスト状態に依存させず、シーン上の通常カードを
+        // 複製元として使う。これが見つからないと片側だけ報酬が欠落し同期が切れる。
+        if (exhibitTemplate == null || thiefTemplate == null)
+        {
+            CardInteraction[] allCards = Object.FindObjectsByType<CardInteraction>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (exhibitTemplate == null)
+                exhibitTemplate = System.Array.Find(allCards, card => card != null &&
+                    card.isExhibit && !card.IsSpecialAction);
+            if (thiefTemplate == null)
+                thiefTemplate = System.Array.Find(allCards, card => card != null &&
+                    card.isPhantomThief && !card.IsSpecialAction);
+            if (exhibitTemplate != null) exhibitTemplates[seat] = exhibitTemplate;
+            if (thiefTemplate != null) thiefTemplates[seat] = thiefTemplate;
+        }
         if (exhibitTemplate == null || thiefTemplate == null)
         {
             Debug.LogWarning($"P{seat + 1}の展示または怪盗カードを複製できないため、特殊カードを配布できません。");
@@ -793,8 +809,10 @@ public static class SpecialActionCardSystem
         }
         if (!handRotations.ContainsKey(seat))
         {
-            handRotations[seat] = exhibitTemplate.transform.rotation;
-            handPositions[seat] = exhibitTemplate.transform.position;
+            CardInteraction poseSource = ownerCards.Find(card => card != null);
+            poseSource = poseSource != null ? poseSource : exhibitTemplate;
+            handRotations[seat] = poseSource.transform.rotation;
+            handPositions[seat] = poseSource.transform.position;
         }
 
         return true;
@@ -802,7 +820,11 @@ public static class SpecialActionCardSystem
 
     private static CardInteraction CreateCard(CardInteraction template, SpecialActionEffect effect, int seat)
     {
-        GameObject clone = Object.Instantiate(template.gameObject, template.transform.parent);
+        List<CardInteraction> ownerCards = GetCards(seat);
+        CardInteraction poseSource = ownerCards != null
+            ? ownerCards.Find(card => card != null) : null;
+        Transform parent = poseSource != null ? poseSource.transform.parent : template.transform.parent;
+        GameObject clone = Object.Instantiate(template.gameObject, parent);
         CardInteraction card = clone.GetComponent<CardInteraction>();
         card.specialEffect = effect;
         // 怪盗系で展示効果も持つのは変装マスクだけ。
